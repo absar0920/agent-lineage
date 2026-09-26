@@ -1,0 +1,46 @@
+[project]
+name = "agent-lineage"
+version = "1.0.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["packages/lineage_sdk", "services/lineage", "services/support_agent"]
+
+[tool.uv.sources]
+agent-lineage-sdk = { workspace = true }
+lineage-service = { workspace = true }
+kestrel-support-agent = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "agent-lineage-sdk",
+    "lineage-service",
+    "kestrel-support-agent",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "testcontainers[postgres]>=4.8",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "respx>=0.21",
+    "psycopg2-binary>=2.9.13",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["packages/lineage_sdk/tests", "services/lineage/tests", "services/support_agent/tests", "tests"]
+markers = ["integration: needs Docker (Postgres via testcontainers)"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "RUF"]
+ignore = ["S101", "S311"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true

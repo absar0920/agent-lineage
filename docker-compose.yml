@@ -1,0 +1,71 @@
+name: agent-lineage
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/postgres-init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres && psql -U postgres -lqt | grep -q lineage"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  lineage:
+    build:
+      context: .
+      dockerfile: services/lineage/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://lineage:lineage@postgres:5432/lineage
+      SUPPORT_AGENT_URL: http://support-agent:8001
+      CORS_ORIGINS: http://localhost:8080
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8002/readyz').status==200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  support-agent:
+    build:
+      context: .
+      dockerfile: services/support_agent/Dockerfile
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://store:store@postgres:5432/store
+      LINEAGE_URL: http://lineage:8002
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/readyz').status==200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build:
+      context: web
+    ports:
+      - "8080:80"
+    depends_on:
+      lineage:
+        condition: service_healthy
+      support-agent:
+        condition: service_healthy
+
+volumes:
+  pgdata:
