@@ -76,7 +76,7 @@ class MockShopify(_MockBase):
             c = (await s.execute(q)).scalar_one_or_none()
         if not c:
             return None
-        return {"customer_id": c.id, "name": c.name, "email": c.email, "phone": c.phone}
+        return {"customer_id": c.id, "full_name": c.name, "email": c.email, "phone": c.phone}
 
     async def list_orders(self, customer_id: str, *, product_query: str | None = None,
                           sort: Literal["placed_at", "updated_at"] = "placed_at", limit: int = 20) -> list[dict[str, Any]]:
