@@ -34,7 +34,7 @@ class Run(Base):
 
 class Step(Base):
     __tablename__ = "steps"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
     seq: Mapped[int] = mapped_column(Integer)
     kind: Mapped[str] = mapped_column(String(12))  # llm|tool|input|output
@@ -53,7 +53,7 @@ class StepValue(Base):
     __tablename__ = "step_values"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"))
-    step_id: Mapped[str] = mapped_column(ForeignKey("steps.id", ondelete="CASCADE"))
+    step_id: Mapped[str] = mapped_column(String(64), ForeignKey("steps.id", ondelete="CASCADE"))
     seq: Mapped[int] = mapped_column(Integer)
     direction: Mapped[str] = mapped_column(String(3))  # in|out
     path: Mapped[str] = mapped_column(String(300))
@@ -66,7 +66,7 @@ class Candidate(Base):
     __tablename__ = "candidates"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id", ondelete="CASCADE"), index=True)
-    step_id: Mapped[str] = mapped_column(ForeignKey("steps.id", ondelete="CASCADE"), index=True)
+    step_id: Mapped[str] = mapped_column(String(64), ForeignKey("steps.id", ondelete="CASCADE"), index=True)
     chosen: Mapped[str] = mapped_column(String(300))
     chosen_fingerprint: Mapped[str] = mapped_column(String(16))
     alternatives: Mapped[list[str]] = mapped_column(Json, default=list)

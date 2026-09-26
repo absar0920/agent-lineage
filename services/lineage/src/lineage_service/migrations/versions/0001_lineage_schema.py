@@ -2,7 +2,7 @@
 
 Revision ID: 0001
 Revises: 
-Create Date: 2026-09-26 11:56:43.899438
+Create Date: 2026-09-26 12:04:07.584888
 """
 from collections.abc import Sequence
 
@@ -69,7 +69,7 @@ def upgrade() -> None:
     sa.UniqueConstraint('email')
     )
     op.create_table('steps',
-    sa.Column('id', sa.String(length=36), nullable=False),
+    sa.Column('id', sa.String(length=64), nullable=False),
     sa.Column('run_id', sa.String(length=36), nullable=False),
     sa.Column('seq', sa.Integer(), nullable=False),
     sa.Column('kind', sa.String(length=12), nullable=False),
@@ -88,7 +88,7 @@ def upgrade() -> None:
     op.create_table('candidates',
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('run_id', sa.String(length=36), nullable=False),
-    sa.Column('step_id', sa.String(length=36), nullable=False),
+    sa.Column('step_id', sa.String(length=64), nullable=False),
     sa.Column('chosen', sa.String(length=300), nullable=False),
     sa.Column('chosen_fingerprint', sa.String(length=16), nullable=False),
     sa.Column('alternatives', sa.JSON().with_variant(postgresql.JSONB(astext_type=sa.Text()), 'postgresql'), nullable=False),
@@ -102,7 +102,7 @@ def upgrade() -> None:
     op.create_table('step_values',
     sa.Column('id', sa.BigInteger(), nullable=False),
     sa.Column('run_id', sa.String(length=36), nullable=False),
-    sa.Column('step_id', sa.String(length=36), nullable=False),
+    sa.Column('step_id', sa.String(length=64), nullable=False),
     sa.Column('seq', sa.Integer(), nullable=False),
     sa.Column('direction', sa.String(length=3), nullable=False),
     sa.Column('path', sa.String(length=300), nullable=False),
