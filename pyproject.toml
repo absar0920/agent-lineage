@@ -24,6 +24,7 @@ dev = [
     "mypy>=1.13",
     "respx>=0.21",
     "psycopg2-binary>=2.9.13",
+    "uvicorn>=0.32",
 ]
 
 [tool.pytest.ini_options]

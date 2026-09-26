@@ -32,6 +32,7 @@ dev = [
     { name = "respx" },
     { name = "ruff" },
     { name = "testcontainers" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
@@ -48,6 +49,7 @@ dev = [
     { name = "respx", specifier = ">=0.21" },
     { name = "ruff", specifier = ">=0.7" },
     { name = "testcontainers", extras = ["postgres"], specifier = ">=4.8" },
+    { name = "uvicorn", specifier = ">=0.32" },
 ]
 
 [[package]]
@@ -738,6 +740,7 @@ dependencies = [
     { name = "agent-lineage-sdk" },
     { name = "alembic" },
     { name = "asyncpg" },
+    { name = "email-validator" },
     { name = "faker" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -753,6 +756,7 @@ requires-dist = [
     { name = "agent-lineage-sdk", editable = "packages/lineage_sdk" },
     { name = "alembic", specifier = ">=1.14" },
     { name = "asyncpg", specifier = ">=0.30" },
+    { name = "email-validator", specifier = ">=2.3.0" },
     { name = "faker", specifier = ">=30.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },

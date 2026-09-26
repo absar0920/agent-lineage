@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     lineage_api_key: SecretStr | None = None
     lineage_redaction_key: SecretStr = Field(min_length=32)
     service_token: SecretStr = Field(min_length=32)
+    # Shared with the lineage service so operator sessions work across both APIs.
+    session_secret: SecretStr | None = None
 
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:8080"]
     log_level: str = "INFO"
