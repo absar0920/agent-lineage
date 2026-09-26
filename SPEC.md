@@ -147,6 +147,9 @@ agent-lineage/
 | `create_refund_offer(order_id, sku, amount)` | payments | Create a pending refund offer |
 | `add_ticket_note(ticket_id, note)` | helpdesk | Write the outcome to the ticket |
 
+After the loop, the reply is posted to the helpdesk ticket as a captured
+`post_ticket_reply` step, so it is replayable like any tool call.
+
 Loop: plain tool-use loop over OpenRouter, `temperature=0`, at most 8 iterations,
 30 s LLM timeout, automatic switch to `LLM_FALLBACK_MODEL` on 429/5xx/timeout.
 Refund offers above a configurable amount (`REFUND_APPROVAL_THRESHOLD`, default $200)
@@ -213,10 +216,12 @@ the agent offers a refund on already-refunded shoes. Every step returns successf
 correct answer. Recorded replay serves the captured output and reproduces ORD-7781
 exactly; the diff shows the first divergence at step 1's output.
 
-**Decision on the defect:** it ships **fixed** in the agent (`ORDER BY placed_at DESC`,
-plus asking the customer when multiple orders match). The original behavior is kept
-behind a test-only flag, so the regression test (§8) keeps proving that Lineage
-diagnoses this class of failure.
+**Decision on the defect:** it ships **fixed** in the agent, with three layers:
+`ORDER BY placed_at DESC`, other matching orders reported so the agent asks the customer
+which one they mean, and the eligibility check also consults the returns ledger. The
+original behavior (both the sort and the ledger-blind eligibility check) is kept behind
+the test-only `LEGACY_ORDER_LOOKUP` flag, so the regression test (§8) keeps proving that
+Lineage diagnoses this class of failure.
 
 ---
 
@@ -225,10 +230,11 @@ diagnoses this class of failure.
 ### 5.1 SDK public API
 
 ```python
-from lineage_sdk import Recorder
+from lineage_sdk import HttpTransport, Recorder, Redactor
 
-rec = Recorder(endpoint=LINEAGE_URL, api_key=LINEAGE_API_KEY,
-               redactor=default_redactor(), service="kestrel-support")
+rec = Recorder(service="kestrel-support",
+               transport=HttpTransport(LINEAGE_URL, LINEAGE_API_KEY),
+               redactor=Redactor(LINEAGE_REDACTION_KEY))
 
 with rec.run("refund-request", input=user_msg, attrs={"ticket_id": t}) as run:
     with run.step("tool", "lookup_recent_order", input=args) as step:
@@ -387,7 +393,7 @@ Spec approval target: **12:15**. Each slice ends with tests passing and a short 
 
 | # | slice | time | done when | priority |
 |---|---|---|---|---|
-| S1 | Repo scaffold, Docker Compose (Postgres ×2), settings, logging, Alembic | 12:15–13:00 | `docker compose up` gives healthy databases | must |
+| S1 | Repo scaffold, Docker Compose (one Postgres server, `store` and `lineage` databases), settings, logging, Alembic | 12:15–13:00 | `docker compose up` gives healthy databases | must |
 | S2 | Store schema, synthetic data generator, mock connectors | 13:00–14:15 | 1,000 customers loaded; connector tests green | must |
 | S3 | Lineage SDK: recorder, values, redaction, fail-open transport | 14:15–15:30 | SDK unit tests green | must |
 | S4 | Lineage service: ingest, storage, lineage query, auth, API keys | 15:30–17:00 | ingest → query integration test green | must |
