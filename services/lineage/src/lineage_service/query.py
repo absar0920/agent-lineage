@@ -125,9 +125,11 @@ async def lineage(session: AsyncSession, run_id: str, fingerprint: str) -> Linea
         summary += f"; it was chosen over {', '.join(alternatives)}"
         if c["reason"]:
             summary += f" ({c['reason']})"
-    consumers = [n for n in nodes if n.role == "consumer"]
-    if consumers:
-        summary += f"; then consumed by {len(consumers)} later step(s)."
+    # Model calls re-read the whole history, so counting them would overstate the flow;
+    # name the tool calls that acted on the value instead.
+    tool_users = list(dict.fromkeys(n.name for n in nodes if n.role == "consumer" and n.kind == "tool"))
+    if tool_users:
+        summary += f"; then used by {', '.join(tool_users)}."
     return LineageResult(
         run_id=run_id,
         fingerprint=fingerprint,
