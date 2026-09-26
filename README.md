@@ -135,6 +135,7 @@ All configuration is through environment variables (`.env`). See `.env.example`.
 | `LINEAGE_RETENTION_DAYS` | lineage | `30` | also editable in Settings; pinned runs are kept |
 | `SERVICE_TOKEN` | both | none (required) | service-to-service calls and the carrier webhook |
 | `SESSION_SECRET` | both | none (required) | signs operator sessions, shared so one login covers both APIs |
+| `CONNECTOR_ENCRYPTION_KEY` | agent | derived from `SERVICE_TOKEN` | AES-256-GCM key material for stored connector credentials |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD` | lineage | none | first admin user, created on start if missing |
 | `COOKIE_SECURE` | lineage | `false` | set `true` behind HTTPS |
 

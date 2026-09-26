@@ -63,7 +63,11 @@ function Thread({ conv }: { conv: Conversation }) {
       void qc.invalidateQueries({ queryKey: ["conversations"] });
     },
   });
-  useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [conv.messages.length, send.isPending]);
+  useEffect(() => {
+    // Block body on purpose: newer browsers return a Promise from scrollIntoView, and React
+    // would treat any returned value as a cleanup function.
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [conv.messages.length, send.isPending]);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();

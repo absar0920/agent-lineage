@@ -7,7 +7,7 @@ import { ErrorPanel, Spinner } from "./ui";
 const ORIGIN_LABEL: Record<string, string> = {
   tool_output: "Entered as a tool output",
   llm_output: "Introduced by the model",
-  run_input: "Came from the customer's message",
+  run_input: "Came from the conversation (customer message or history)",
   unsourced: "Used without an earlier source",
 };
 

@@ -15,6 +15,7 @@ dependencies = [
     "faker>=30.0",
     "prometheus-client>=0.21",
     "email-validator>=2.3.0",
+    "cryptography>=43",
 ]
 
 [tool.uv.sources]

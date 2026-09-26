@@ -90,3 +90,19 @@ async def test_three_connectors_connected_and_five_available(store_db):
     assert connected == ["shopify", "stripe", "zendesk"]
     assert len(statuses) == 8
     assert next(c for c in statuses if c.name == "shopify").records["customers"] == 120
+
+
+async def test_connector_credentials_are_encrypted_at_rest(store_db):
+    from support_agent.connectors.registry import save_connector_config
+    from support_agent.connectors.secrets import SecretBox, derive_key
+
+    box = SecretBox(derive_key("k" * 32))
+    async with store_db.sessionmaker() as s:
+        await save_connector_config(
+            s, "woocommerce", {"store_url": "https://shop.example", "api_key": "ck_live_123", "api_secret": "cs_9"}, box
+        )
+        cfg = await s.get(m.ConnectorConfig, "woocommerce")
+    assert cfg.settings["store_url"] == "https://shop.example"
+    assert "ck_live_123" not in str(cfg.settings) and "cs_9" not in str(cfg.settings)
+    assert box.decrypt(cfg.settings["api_key"], context="woocommerce:api_key") == "ck_live_123"
+    assert cfg.enabled is False  # no adapter yet

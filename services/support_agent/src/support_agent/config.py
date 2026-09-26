@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     lineage_api_key: SecretStr | None = None
     lineage_redaction_key: SecretStr = Field(min_length=32)
     service_token: SecretStr = Field(min_length=32)
+    # AES key material for stored connector credentials; derived from SERVICE_TOKEN when unset.
+    connector_encryption_key: SecretStr | None = None
     # Shared with the lineage service so operator sessions work across both APIs.
     session_secret: SecretStr | None = None
 

@@ -15,7 +15,9 @@ export default function Runs() {
   const [search, setSearch] = useState(q);
   const navigate = useNavigate();
 
-  useEffect(() => setSearch(q), [q]);
+  useEffect(() => {
+    setSearch(q);
+  }, [q]);
   useEffect(() => {
     const t = setTimeout(() => {
       if (search !== q) update({ q: search || null, page: null });

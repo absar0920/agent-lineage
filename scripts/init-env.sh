@@ -9,6 +9,7 @@ sed -e "s|^LINEAGE_API_KEY=.*|LINEAGE_API_KEY=lk_$(secret)|" \
     -e "s|^LINEAGE_REDACTION_KEY=.*|LINEAGE_REDACTION_KEY=$(secret)|" \
     -e "s|^SERVICE_TOKEN=.*|SERVICE_TOKEN=$(secret)|" \
     -e "s|^SESSION_SECRET=.*|SESSION_SECRET=$(secret)|" \
+    -e "s|^CONNECTOR_ENCRYPTION_KEY=.*|CONNECTOR_ENCRYPTION_KEY=$(secret)|" \
     -e "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=${admin_password}|" \
     .env.example > .env
 chmod 600 .env

@@ -16,6 +16,7 @@ from support_agent.connectors.mock import (
     MockStripe,
     MockZendesk,
 )
+from support_agent.connectors.secrets import SecretBox
 from support_agent.data import models as m
 from support_agent.db import Base
 
@@ -84,13 +85,13 @@ async def connector_statuses(session: AsyncSession) -> list[ConnectorStatus]:
     return out
 
 
-async def save_connector_config(session: AsyncSession, name: str, settings: dict[str, Any]) -> None:
-    """Store settings for a connector. Only connectors with an adapter can be enabled."""
+async def save_connector_config(session: AsyncSession, name: str, settings: dict[str, Any], box: SecretBox) -> None:
+    """Store settings for a connector (credentials encrypted). Only connectors with an adapter can be enabled."""
     cfg = await session.get(m.ConnectorConfig, name)
     if cfg is None:
         cfg = m.ConnectorConfig(name=name)
         session.add(cfg)
-    cfg.settings = settings
+    cfg.settings = box.seal_settings(name, settings)
     cfg.enabled = name in ADAPTERS
     cfg.updated_at = datetime.now(UTC)
     await session.commit()

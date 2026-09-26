@@ -43,6 +43,7 @@ from support_agent.connectors.registry import (
     connector_statuses,
     save_connector_config,
 )
+from support_agent.connectors.secrets import SecretBox, derive_key
 from support_agent.data import models as m
 from support_agent.db import Database
 from support_agent.llm.client import (
@@ -105,6 +106,7 @@ def create_app(
     db = Database(settings.database_url)
     rec = recorder or build_recorder(settings)
     model = llm or build_llm(settings)
+    secret_box = SecretBox(derive_key((settings.connector_encryption_key or settings.service_token).get_secret_value()))
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -392,7 +394,7 @@ def create_app(
         if name not in CATALOG:
             raise ApiError(404, "not_found", "Unknown connector")
         # Never echo secrets back; store only non-empty keys.
-        await save_connector_config(s, name, {k: v for k, v in body.settings.items() if v})
+        await save_connector_config(s, name, {k: v for k, v in body.settings.items() if v}, secret_box)
         return {"name": name, "saved": True, "enabled": name in ADAPTERS}
 
     # --- carrier webhook (ShipStation-shaped) --------------------------------

@@ -95,7 +95,9 @@ function RunCard({ run, label }: { run: RunSummary; label: string }) {
 function DiffRowView({ row, isFirst }: { row: DiffRow; isFirst: boolean }) {
   const changed = row.changes.length > 0;
   const [open, setOpen] = useState(isFirst);
-  useEffect(() => setOpen(isFirst), [isFirst]);
+  useEffect(() => {
+    setOpen(isFirst);
+  }, [isFirst]);
   const show: "input" | "output" = row.changes.includes("output") || !row.changes.includes("input") ? "output" : "input";
   return (
     <div id={`diff-row-${row.index}`} className={`diff-row ${changed ? "changed" : ""} ${isFirst ? "first" : ""}`}>
