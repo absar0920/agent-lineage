@@ -433,3 +433,24 @@ textarea { resize: vertical; width: 100%; }
   .msg { max-width: 90%; }
 }
 .inline-form input:not([type=number]):not([type=checkbox]) { min-width: 240px; flex: 0 1 280px; }
+
+/* ---------- read-only (viewer role) ---------- */
+.readonly-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--bg-2);
+  margin-top: 8px;
+}
+.composer .readonly-note {
+  margin: 0;
+}
+.pin-static {
+  display: inline-block;
+  width: 1.5em;
+  text-align: center;
+  color: var(--muted);
+}

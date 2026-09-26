@@ -68,6 +68,7 @@ export default function App() {
           <div className="muted small ellipsis" title={me.data.email}>
             {me.data.email}
           </div>
+          <div className="muted small">{me.data.role === "admin" ? "Admin" : "Viewer (read-only)"}</div>
           <button className="btn btn-ghost btn-sm" onClick={logout}>
             Sign out
           </button>

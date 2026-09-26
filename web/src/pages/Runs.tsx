@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type RunSummary } from "../api";
-import { Empty, ErrorPanel, ReplayBadge, Spinner, StatusBadge, dateTime, duration, relTime, shortId, useToast } from "../components/ui";
+import { Empty, ErrorPanel, ReplayBadge, Spinner, StatusBadge, dateTime, duration, relTime, shortId, useIsAdmin, useToast } from "../components/ui";
 
 const PAGE = 50;
 
@@ -138,6 +138,7 @@ export default function Runs() {
 }
 
 export function PinButton({ run }: { run: Pick<RunSummary, "id" | "pinned"> }) {
+  const isAdmin = useIsAdmin();
   const qc = useQueryClient();
   const toast = useToast();
   const m = useMutation({
@@ -149,6 +150,13 @@ export function PinButton({ run }: { run: Pick<RunSummary, "id" | "pinned"> }) {
     },
     onError: toast.error,
   });
+  if (!isAdmin) {
+    return (
+      <span className="pin-static" title={run.pinned ? "Pinned (exempt from retention)" : "Only admins can pin runs"}>
+        {run.pinned ? "★" : ""}
+      </span>
+    );
+  }
   return (
     <button
       className={`pin ${run.pinned ? "pinned" : ""}`}

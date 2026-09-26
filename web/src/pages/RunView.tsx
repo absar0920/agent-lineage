@@ -15,6 +15,7 @@ import {
   duration,
   relTime,
   shortId,
+  useIsAdmin,
   useToast,
   type ValueIndex,
 } from "../components/ui";
@@ -100,6 +101,7 @@ export default function RunView() {
 }
 
 function RunHeader({ run, onReplay }: { run: RunDetail; onReplay: () => void }) {
+  const isAdmin = useIsAdmin();
   const a = run.attrs;
   return (
     <header className="run-head">
@@ -116,7 +118,7 @@ function RunHeader({ run, onReplay }: { run: RunDetail; onReplay: () => void }) 
           </Badge>
         )}
         <div className="spacer" />
-        {!run.replay_of && (
+        {!run.replay_of && isAdmin && (
           <button className="btn btn-primary" onClick={onReplay} disabled={run.status === "running"}>
             ↻ Replay
           </button>

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { api, type Connector, type ConnectorTest } from "../api";
-import { Badge, ErrorPanel, Modal, Spinner, relTime, useToast } from "../components/ui";
+import { Badge, ErrorPanel, Modal, ReadOnlyNote, Spinner, relTime, useIsAdmin, useToast } from "../components/ui";
 
 const KIND_LABEL: Record<string, string> = { commerce: "Commerce", helpdesk: "Helpdesk", payments: "Payments", shipping: "Shipping" };
 
@@ -68,6 +68,7 @@ export default function Connections() {
 }
 
 function ConnectorCard({ c, saved, onConnect }: { c: Connector; saved?: boolean; onConnect?: () => void }) {
+  const isAdmin = useIsAdmin();
   const [result, setResult] = useState<ConnectorTest | null>(null);
   const toast = useToast();
   const test = useMutation({ mutationFn: () => api.testConnector(c.name), onSuccess: setResult, onError: toast.error });
@@ -113,6 +114,8 @@ function ConnectorCard({ c, saved, onConnect }: { c: Connector; saved?: boolean;
         <div className="connector-actions">
           {saved ? (
             <span className="muted small">Saved. The adapter for {c.display_name} is coming soon; the connection activates automatically once it ships.</span>
+          ) : !isAdmin ? (
+            <ReadOnlyNote>Only admins can connect systems.</ReadOnlyNote>
           ) : (
             <button className="btn btn-sm" onClick={onConnect}>
               Connect

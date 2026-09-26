@@ -160,6 +160,11 @@ after the rotation won't link to each other.
 
 ### Security notes
 
+- **Roles:**
+  - **Admins** can do everything.
+  - **Viewers** can read conversations, runs, lineage, diffs, connections and settings, and can test a connection.
+  - Viewers cannot start or reply to conversations (model spend, refund offers), replay runs, pin runs, save connector credentials, change retention, or see or manage API keys and users.
+  - Both services enforce this server-side. The role travels in the signed session, and a session without a role is treated as a viewer.
 - Operator passwords are hashed with argon2, and API keys are stored as SHA-256 hashes (shown once on creation).
 - Sessions are HMAC-signed, httpOnly, SameSite=Strict cookies. Set `COOKIE_SECURE=true` behind TLS.
 - The model never controls identity or money: customer and ticket IDs are injected by the

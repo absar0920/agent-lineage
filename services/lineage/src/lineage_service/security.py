@@ -72,8 +72,11 @@ async def ensure_user(session: AsyncSession, email: str, password: str, role: st
     return user
 
 
-def sign_session(user_id: str, secret: str, ttl_s: int) -> str:
-    payload = base64.urlsafe_b64encode(json.dumps({"uid": user_id, "exp": int(time.time()) + ttl_s}).encode())
+def sign_session(user_id: str, role: str, secret: str, ttl_s: int) -> str:
+    # The role travels in the signed session so the support agent can authorize without a DB lookup.
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"uid": user_id, "role": role, "exp": int(time.time()) + ttl_s}).encode()
+    )
     sig = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
     return f"{payload.decode()}.{sig}"
 

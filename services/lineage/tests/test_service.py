@@ -167,3 +167,30 @@ async def test_retention_purges_old_unpinned_runs_only(pg_urls):
         remaining = {r for r in (await s.execute(Run.__table__.select().with_only_columns(Run.id))).scalars()}
     await db.dispose()
     assert "old-unpinned" not in remaining and {"old-pinned", "recent"} <= remaining
+
+
+def test_viewer_can_investigate_but_not_change_anything(client):
+    run_id, events = incident_events()
+    client.post("/v1/ingest", json={"events": events}, headers={"Authorization": f"Bearer {API_KEY}"})
+    login(client)
+    viewer = {"email": "viewer@example.com", "password": "viewer-password-12345"}
+    assert client.post("/v1/users", json={**viewer, "role": "viewer"}).status_code == 201
+    client.post("/v1/auth/logout")
+    assert client.post("/v1/auth/login", json=viewer).json()["role"] == "viewer"
+
+    # read access
+    assert client.get("/v1/runs").status_code == 200
+    assert client.get(f"/v1/runs/{run_id}").status_code == 200
+    assert client.get(f"/v1/runs/{run_id}/lineage", params={"fingerprint": fingerprint("ORD-7781")}).status_code == 200
+    assert client.get("/v1/settings").status_code == 200
+    # no writes, no replays (they spend model budget), no key/user listings
+    forbidden = [
+        client.post(f"/v1/runs/{run_id}/replay", json={"mode": "recorded"}),
+        client.post(f"/v1/runs/{run_id}/pin", json={"pinned": True}),
+        client.put("/v1/settings", json={"retention_days": 5}),
+        client.get("/v1/api-keys"),
+        client.post("/v1/api-keys", json={"name": "x"}),
+        client.get("/v1/users"),
+        client.post("/v1/users", json={"email": "x@example.com", "password": "x" * 12}),
+    ]
+    assert [r.status_code for r in forbidden] == [403] * len(forbidden)

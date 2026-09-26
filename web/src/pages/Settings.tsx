@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../api";
-import { Badge, CopyButton, ErrorPanel, Spinner, dateTime, relTime, useToast } from "../components/ui";
+import { Badge, CopyButton, ErrorPanel, ReadOnlyNote, Spinner, dateTime, relTime, useIsAdmin, useToast } from "../components/ui";
 
 export default function Settings() {
+  const isAdmin = useIsAdmin();
   return (
     <div className="page">
       <header className="page-head">
@@ -13,13 +14,23 @@ export default function Settings() {
         </div>
       </header>
       <Retention />
-      <ApiKeys />
-      <Users />
+      {isAdmin ? (
+        <>
+          <ApiKeys />
+          <Users />
+        </>
+      ) : (
+        <section className="card section">
+          <h3>API keys and users</h3>
+          <ReadOnlyNote>Managing ingest API keys and operator accounts requires the admin role.</ReadOnlyNote>
+        </section>
+      )}
     </div>
   );
 }
 
 function Retention() {
+  const isAdmin = useIsAdmin();
   const q = useQuery({ queryKey: ["settings"], queryFn: api.settings });
   const [days, setDays] = useState("");
   const toast = useToast();
@@ -45,12 +56,16 @@ function Retention() {
       <p className="muted">Runs older than this are deleted automatically. Pinned runs are always kept.</p>
       {q.error && <ErrorPanel error={q.error} />}
       <form className="inline-form" onSubmit={submit}>
-        <input type="number" min={1} max={3650} value={days} onChange={(e) => setDays(e.target.value)} aria-label="Retention days" />
+        <input type="number" min={1} max={3650} value={days} onChange={(e) => setDays(e.target.value)} aria-label="Retention days"
+          readOnly={!isAdmin} />
         <span className="muted">days</span>
-        <button className="btn btn-primary btn-sm" disabled={save.isPending || !days || Number(days) === q.data?.retention_days}>
-          Save
-        </button>
+        {isAdmin && (
+          <button className="btn btn-primary btn-sm" disabled={save.isPending || !days || Number(days) === q.data?.retention_days}>
+            Save
+          </button>
+        )}
       </form>
+      {!isAdmin && <ReadOnlyNote>Only admins can change retention.</ReadOnlyNote>}
     </section>
   );
 }

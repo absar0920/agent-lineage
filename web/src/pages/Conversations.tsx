@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type Conversation, type Customer } from "../api";
-import { Empty, ErrorPanel, Spinner, relTime, shortId } from "../components/ui";
+import { Empty, ErrorPanel, ReadOnlyNote, Spinner, relTime, shortId, useIsAdmin } from "../components/ui";
 
 export default function Conversations() {
   const { id } = useParams();
@@ -10,15 +10,18 @@ export default function Conversations() {
   const convs = useQuery({ queryKey: ["conversations"], queryFn: api.conversations, refetchInterval: 15_000 });
   const current = convs.data?.find((c) => c.id === id);
   const composing = !id;
+  const isAdmin = useIsAdmin();
 
   return (
     <div className="conv-layout">
       <aside className="conv-list">
         <div className="conv-list-head">
           <h2>Conversations</h2>
-          <button className="btn btn-primary btn-sm" onClick={() => navigate("/conversations")}>
-            + New
-          </button>
+          {isAdmin && (
+            <button className="btn btn-primary btn-sm" onClick={() => navigate("/conversations")}>
+              + New
+            </button>
+          )}
         </div>
         {convs.error && <ErrorPanel error={convs.error} />}
         {convs.isLoading && <Spinner />}
@@ -38,7 +41,11 @@ export default function Conversations() {
         })}
       </aside>
       <section className="conv-main">
-        {composing ? (
+        {composing && !isAdmin ? (
+          <Empty title="Select a conversation">
+            <ReadOnlyNote>Viewers can read conversations and open their runs. Starting or replying requires the admin role.</ReadOnlyNote>
+          </Empty>
+        ) : composing ? (
           <NewConversation onStarted={(cid) => navigate(`/conversations/${cid}`)} />
         ) : !convs.data ? (
           <Spinner />
@@ -53,6 +60,7 @@ export default function Conversations() {
 }
 
 function Thread({ conv }: { conv: Conversation }) {
+  const isAdmin = useIsAdmin();
   const qc = useQueryClient();
   const [text, setText] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
@@ -114,6 +122,11 @@ function Thread({ conv }: { conv: Conversation }) {
         <div ref={endRef} />
       </div>
       {send.error && <ErrorPanel error={send.error} />}
+      {!isAdmin ? (
+        <div className="composer">
+          <ReadOnlyNote>Read-only: replying as the customer requires the admin role.</ReadOnlyNote>
+        </div>
+      ) : (
       <form className="composer" onSubmit={submit}>
         <textarea
           value={text}
@@ -129,6 +142,7 @@ function Thread({ conv }: { conv: Conversation }) {
           Send
         </button>
       </form>
+      )}
     </div>
   );
 }

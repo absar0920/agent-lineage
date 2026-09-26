@@ -112,3 +112,32 @@ def test_capture_is_fail_open_when_lineage_is_down(pg_urls, store_db):
         assert transport.flush(10)
         assert transport.stats.dropped > 0 and transport.stats.sent == 0
         assert "lineage_dropped_events_total" in st.agent.get("/metrics").text
+
+
+def test_support_agent_enforces_roles_from_the_shared_session(pg_urls, store_db):
+    import httpx
+
+    from tests.servers import ADMIN
+
+    with stack(pg_urls, llm=PolicyLLM(), now=ANCHOR) as st:
+        viewer = {"email": "viewer@example.com", "password": "viewer-password-12345"}
+        st.lineage.post("/v1/users", json={**viewer, "role": "viewer"})
+        agent_url = str(st.agent.base_url)
+
+        def session_client(creds: dict) -> httpx.Client:
+            with httpx.Client(base_url=str(st.lineage.base_url)) as lc:
+                cookie = lc.post("/v1/auth/login", json=creds).cookies["lineage_session"]
+            return httpx.Client(base_url=agent_url, cookies={"lineage_session": cookie}, timeout=30)
+
+        body = {"customer_email": "sara.qureshi@example.com", "message": MESSAGE}
+        with session_client(viewer) as v:
+            assert v.get("/v1/conversations").status_code == 200
+            assert v.get("/v1/connectors").status_code == 200
+            assert v.post("/v1/connectors/shopify/test").status_code == 200
+            assert v.post("/v1/conversations", json=body).status_code == 403
+            assert v.put("/v1/connectors/woocommerce", json={"settings": {"api_key": "k"}}).status_code == 403
+        with session_client(ADMIN) as a:
+            assert a.post("/v1/conversations", json=body).status_code == 201
+        # a tampered session is rejected outright
+        with httpx.Client(base_url=agent_url, cookies={"lineage_session": "eyJ1aWQiOiJ4In0.bad"}) as t:
+            assert t.get("/v1/conversations").status_code == 401

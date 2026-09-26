@@ -184,7 +184,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if user is None:
             raise ApiError(401, "invalid_credentials", "Invalid email or password")
         token = security.sign_session(
-            user.id, settings.session_secret.get_secret_value(), settings.session_ttl_hours * 3600
+            user.id, user.role, settings.session_secret.get_secret_value(), settings.session_ttl_hours * 3600
         )
         response.set_cookie(
             COOKIE,
@@ -330,7 +330,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         mode: Literal["live", "recorded"]
 
     @app.post("/v1/runs/{run_id}/replay")
-    async def replay(run_id: str, body: ReplayBody, request: Request, s: Session, _: UserDep) -> dict[str, Any]:
+    async def replay(run_id: str, body: ReplayBody, request: Request, s: Session, user: UserDep) -> dict[str, Any]:
+        _require_admin(user)  # a live replay spends model budget
         run = await _load_run(s, run_id)
         if run.replay_of:
             raise ApiError(409, "replay_of_replay", "Replay the original run instead")
@@ -386,7 +387,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         pinned: bool
 
     @app.post("/v1/runs/{run_id}/pin")
-    async def pin(run_id: str, body: PinBody, s: Session, _: UserDep) -> dict[str, Any]:
+    async def pin(run_id: str, body: PinBody, s: Session, user: UserDep) -> dict[str, Any]:
+        _require_admin(user)
         await _load_run(s, run_id, with_steps=False)
         await s.execute(update(Run).where(Run.id == run_id).values(pinned=body.pinned))
         await s.commit()
@@ -413,7 +415,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"retention_days": body.retention_days}
 
     @app.get("/v1/api-keys")
-    async def list_keys(s: Session, _: UserDep) -> list[dict[str, Any]]:
+    async def list_keys(s: Session, user: UserDep) -> list[dict[str, Any]]:
+        _require_admin(user)
         keys = (await s.execute(select(ApiKey).order_by(ApiKey.created_at.desc()))).scalars().all()
         return [
             {
@@ -447,7 +450,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"revoked": True}
 
     @app.get("/v1/users")
-    async def list_users(s: Session, _: UserDep) -> list[dict[str, Any]]:
+    async def list_users(s: Session, user: UserDep) -> list[dict[str, Any]]:
+        _require_admin(user)
         users = (await s.execute(select(User).order_by(User.created_at))).scalars().all()
         return [{"id": u.id, "email": u.email, "role": u.role, "created_at": u.created_at} for u in users]
 

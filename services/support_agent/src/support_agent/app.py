@@ -198,11 +198,14 @@ def create_app(
         raw = request.headers.get("authorization", "").removeprefix("Bearer ").strip()
         return bool(raw) and hmac.compare_digest(raw.encode(), settings.service_token.get_secret_value().encode())
 
-    def _session_ok(request: Request) -> bool:
-        """Operators log in on the lineage service; the signed session cookie is shared (same secret)."""
+    def _session_role(request: Request) -> str | None:
+        """Operators log in on the lineage service; the signed session cookie is shared (same secret).
+
+        Returns the session's role, or None when there is no valid session. Sessions without a
+        role are treated as viewers (least privilege)."""
         token = request.cookies.get(SESSION_COOKIE)
         if not token or not settings.session_secret:
-            return False
+            return None
         try:
             payload, sig = token.rsplit(".", 1)
             expected = hmac.new(
@@ -210,18 +213,31 @@ def create_app(
             ).hexdigest()
             data = json.loads(base64.urlsafe_b64decode(payload))
         except ValueError:
-            return False
-        return hmac.compare_digest(sig, expected) and data.get("exp", 0) > time.time()
+            return None
+        if not hmac.compare_digest(sig, expected) or data.get("exp", 0) <= time.time():
+            return None
+        return str(data.get("role") or "viewer")
 
-    async def operator(request: Request) -> None:
-        if not (_session_ok(request) or _bearer_ok(request)):
+    async def operator(request: Request) -> str:
+        if _bearer_ok(request):
+            return "service"
+        role = _session_role(request)
+        if role is None:
             raise ApiError(401, "unauthenticated", "Login required")
+        return role
+
+    async def admin(role: Annotated[str, Depends(operator)]) -> None:
+        # Starting conversations spends model budget and can create refund offers;
+        # connector settings hold credentials. Viewers can only investigate.
+        if role not in ("admin", "service"):
+            raise ApiError(403, "forbidden", "Admin role required")
 
     async def service(request: Request) -> None:
         if not _bearer_ok(request):
             raise ApiError(401, "unauthenticated", "Service token required")
 
-    Operator = Annotated[None, Depends(operator)]
+    Operator = Annotated[str, Depends(operator)]
+    Admin = Annotated[None, Depends(admin)]
     Service = Annotated[None, Depends(service)]
 
     # --- health & metrics ---------------------------------------------------
@@ -299,7 +315,7 @@ def create_app(
         }
 
     @app.post("/v1/conversations", status_code=201)
-    async def start_conversation(body: StartBody, s: Session, _: Operator) -> dict[str, Any]:
+    async def start_conversation(body: StartBody, s: Session, _: Admin) -> dict[str, Any]:
         connectors = build_connectors(db.sessionmaker, settings)
         customer = await connectors.commerce.find_customer(email=body.customer_email)
         if customer is None:
@@ -314,7 +330,7 @@ def create_app(
         return await take_turn(s, conv, body.message)
 
     @app.post("/v1/conversations/{conversation_id}/messages")
-    async def continue_conversation(conversation_id: str, body: MessageBody, s: Session, _: Operator) -> dict[str, Any]:
+    async def continue_conversation(conversation_id: str, body: MessageBody, s: Session, _: Admin) -> dict[str, Any]:
         conv = await s.get(m.Conversation, conversation_id)
         if conv is None:
             raise ApiError(404, "not_found", "Conversation not found")
@@ -390,7 +406,7 @@ def create_app(
         settings: dict[str, str] = Field(default_factory=dict)
 
     @app.put("/v1/connectors/{name}")
-    async def connector_configure(name: str, body: ConnectorConfigBody, s: Session, _: Operator) -> dict[str, Any]:
+    async def connector_configure(name: str, body: ConnectorConfigBody, s: Session, _: Admin) -> dict[str, Any]:
         if name not in CATALOG:
             raise ApiError(404, "not_found", "Unknown connector")
         # Never echo secrets back; store only non-empty keys.

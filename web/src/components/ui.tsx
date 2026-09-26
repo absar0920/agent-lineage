@@ -1,5 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ApiError } from "../api";
+import { useQuery } from "@tanstack/react-query";
+import { ApiError, api } from "../api";
+
+// ---------- roles ----------
+
+/** Admins can change things; viewers can only investigate. The server enforces this too. */
+export function useIsAdmin(): boolean {
+  const me = useQuery({ queryKey: ["me"], queryFn: api.me, retry: false, staleTime: 60_000 });
+  return me.data?.role === "admin";
+}
+
+export function ReadOnlyNote({ children }: { children: ReactNode }) {
+  return <div className="readonly-note muted small">🔒 {children}</div>;
+}
 
 // ---------- formatting ----------
 
