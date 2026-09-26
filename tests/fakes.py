@@ -13,8 +13,11 @@ from support_agent.llm.client import LLMResponse
 
 
 def _call(name: str, **args: Any) -> LLMResponse:
-    return LLMResponse(content=None, model="scripted/policy",
-                       tool_calls=[{"id": f"call_{uuid.uuid4().hex[:8]}", "name": name, "arguments": json.dumps(args)}])
+    return LLMResponse(
+        content=None,
+        model="scripted/policy",
+        tool_calls=[{"id": f"call_{uuid.uuid4().hex[:8]}", "name": name, "arguments": json.dumps(args)}],
+    )
 
 
 def _say(text: str) -> LLMResponse:
@@ -48,8 +51,10 @@ class PolicyLLM:
                 return _say(f"I'm sorry, that item isn't eligible for a refund: {result['reason']}.")
             return _call("create_refund_offer", order_id=result["order_id"], sku=result["sku"])
         if tool == "create_refund_offer":
-            return _say(f"I've created refund offer {result['refund_offer_id']} for ${result['amount']} "
-                        f"on order {result['order_id']}.")
+            return _say(
+                f"I've created refund offer {result['refund_offer_id']} for ${result['amount']} "
+                f"on order {result['order_id']}."
+            )
         return _say("How else can I help?")
 
 

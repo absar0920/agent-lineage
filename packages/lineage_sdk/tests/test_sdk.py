@@ -2,8 +2,14 @@ import time
 
 import httpx
 import pytest
-
-from lineage_sdk import HttpTransport, MemoryTransport, RecordedRun, Recorder, Redactor, ReplayMissError
+from lineage_sdk import (
+    HttpTransport,
+    MemoryTransport,
+    RecordedRun,
+    Recorder,
+    Redactor,
+    ReplayMissError,
+)
 from lineage_sdk.values import extract, fingerprint
 
 KEY = "unit-test-redaction-key-0123456789"
@@ -11,14 +17,19 @@ KEY = "unit-test-redaction-key-0123456789"
 
 # --- values ---------------------------------------------------------------
 
+
 def test_fingerprint_normalises_numbers_and_case():
     assert fingerprint("129.00") == fingerprint(129) == fingerprint("129")
     assert fingerprint("ORD-7781") == fingerprint(" ord-7781 ")
 
 
 def test_extract_walks_json_and_skips_noise():
-    vals = {v.display: v.path for v in extract({"order_id": "ORD-7781", "qty": 1, "ok": True,
-                                                "items": [{"sku": "FW-RIDGE-TR", "price": "129.00"}]})}
+    vals = {
+        v.display: v.path
+        for v in extract(
+            {"order_id": "ORD-7781", "qty": 1, "ok": True, "items": [{"sku": "FW-RIDGE-TR", "price": "129.00"}]}
+        )
+    }
     assert vals == {"ORD-7781": "$.order_id", "FW-RIDGE-TR": "$.items[0].sku", "129.00": "$.items[0].price"}
 
 
@@ -34,6 +45,7 @@ def test_extract_looks_inside_json_string_arguments():
 
 
 # --- redaction ------------------------------------------------------------
+
 
 def test_redaction_is_stable_and_keeps_business_ids():
     r = Redactor(KEY)
@@ -64,6 +76,7 @@ def test_different_keys_give_different_tokens():
 
 # --- recorder -------------------------------------------------------------
 
+
 def test_recorder_emits_run_steps_and_candidates_redacted():
     t = MemoryTransport()
     rec = Recorder(service="svc", transport=t, redactor=Redactor(KEY))
@@ -92,9 +105,11 @@ async def test_tool_decorator_wraps_async_functions():
     t = MemoryTransport()
     rec = Recorder(service="svc", transport=t)
     with rec.run("r") as run:
+
         @run.tool
         async def get_order(order_id: str) -> dict:
             return {"order_id": order_id}
+
         assert await get_order(order_id="ORD-1") == {"order_id": "ORD-1"}
     assert t.events[1]["name"] == "get_order" and t.events[1]["output"] == {"order_id": "ORD-1"}
 
@@ -112,6 +127,7 @@ def test_capture_failures_never_reach_the_agent():
 
 # --- transport ------------------------------------------------------------
 
+
 def test_http_transport_batches_and_delivers():
     received: list[int] = []
 
@@ -119,7 +135,9 @@ def test_http_transport_batches_and_delivers():
         received.append(len(__import__("json").loads(request.content)["events"]))
         return httpx.Response(202)
 
-    t = HttpTransport("http://lineage", "k", flush_interval=0.05, client=httpx.Client(transport=httpx.MockTransport(handler)))
+    t = HttpTransport(
+        "http://lineage", "k", flush_interval=0.05, client=httpx.Client(transport=httpx.MockTransport(handler))
+    )
     for i in range(1200):
         t.send({"event_id": str(i)})
     assert t.flush(5)
@@ -131,8 +149,14 @@ def test_http_transport_drops_after_retries_without_blocking():
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("down")
 
-    t = HttpTransport("http://lineage", "k", flush_interval=0.01, max_retries=2, backoff=0.01,
-                      client=httpx.Client(transport=httpx.MockTransport(handler)))
+    t = HttpTransport(
+        "http://lineage",
+        "k",
+        flush_interval=0.01,
+        max_retries=2,
+        backoff=0.01,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
     start = time.perf_counter()
     for i in range(10):
         t.send({"event_id": str(i)})
@@ -143,8 +167,13 @@ def test_http_transport_drops_after_retries_without_blocking():
 
 
 def test_http_transport_counts_queue_overflow():
-    t = HttpTransport("http://lineage", "k", max_queue=5, flush_interval=10,
-                      client=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(202))))
+    t = HttpTransport(
+        "http://lineage",
+        "k",
+        max_queue=5,
+        flush_interval=10,
+        client=httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(202))),
+    )
     t._stop.set()  # freeze the worker so the queue fills
     t._thread.join(2)
     for i in range(8):
@@ -154,11 +183,29 @@ def test_http_transport_counts_queue_overflow():
 
 # --- replay ---------------------------------------------------------------
 
-RUN = {"id": "r1", "steps": [
-    {"seq": 1, "kind": "llm", "name": "chat", "status": "ok", "input": {}, "output": {"content": "a"}},
-    {"seq": 2, "kind": "tool", "name": "lookup", "status": "ok", "input": {"q": "shoes"}, "output": {"order_id": "ORD-7781"}},
-    {"seq": 3, "kind": "tool", "name": "create", "status": "error", "input": {"id": 1}, "output": None, "error": "boom"},
-]}
+RUN = {
+    "id": "r1",
+    "steps": [
+        {"seq": 1, "kind": "llm", "name": "chat", "status": "ok", "input": {}, "output": {"content": "a"}},
+        {
+            "seq": 2,
+            "kind": "tool",
+            "name": "lookup",
+            "status": "ok",
+            "input": {"q": "shoes"},
+            "output": {"order_id": "ORD-7781"},
+        },
+        {
+            "seq": 3,
+            "kind": "tool",
+            "name": "create",
+            "status": "error",
+            "input": {"id": 1},
+            "output": None,
+            "error": "boom",
+        },
+    ],
+}
 
 
 def test_recorded_run_serves_outputs_in_order():

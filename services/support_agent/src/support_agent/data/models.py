@@ -142,9 +142,7 @@ class Conversation(Base):
     customer_id: Mapped[str] = mapped_column(ForeignKey("customers.id"), index=True)
     ticket_id: Mapped[str] = mapped_column(ForeignKey("tickets.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    messages: Mapped[list["ConversationMessage"]] = relationship(
-        lazy="selectin", order_by="ConversationMessage.id"
-    )
+    messages: Mapped[list["ConversationMessage"]] = relationship(lazy="selectin", order_by="ConversationMessage.id")
 
 
 class ConversationMessage(Base):

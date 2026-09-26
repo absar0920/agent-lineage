@@ -81,19 +81,37 @@ class Step:
     @_safe
     def _emit(self) -> None:
         red = self.run.recorder.redact
-        self.run.recorder.transport.send({
-            "event_id": str(uuid.uuid4()), "type": "step", "run_id": self.run.id, "step_id": self.id,
-            "seq": self.seq, "kind": self.kind, "name": self.name, "status": self._status,
-            "error": red(self._error) if self._error else None,
-            "input": red(_jsonable(self._input)), "output": red(_jsonable(self._output)),
-            "started_at": self._started_at, "duration_ms": int((time.perf_counter() - self._t0) * 1000),
-            "candidates": [red(_jsonable(c)) for c in self._candidates],
-        })
+        self.run.recorder.transport.send(
+            {
+                "event_id": str(uuid.uuid4()),
+                "type": "step",
+                "run_id": self.run.id,
+                "step_id": self.id,
+                "seq": self.seq,
+                "kind": self.kind,
+                "name": self.name,
+                "status": self._status,
+                "error": red(self._error) if self._error else None,
+                "input": red(_jsonable(self._input)),
+                "output": red(_jsonable(self._output)),
+                "started_at": self._started_at,
+                "duration_ms": int((time.perf_counter() - self._t0) * 1000),
+                "candidates": [red(_jsonable(c)) for c in self._candidates],
+            }
+        )
 
 
 class Run:
-    def __init__(self, recorder: "Recorder", name: str, input: Any, attrs: dict[str, Any],
-                 run_id: str | None, replay_of: str | None, replay_mode: str | None) -> None:
+    def __init__(
+        self,
+        recorder: "Recorder",
+        name: str,
+        input: Any,
+        attrs: dict[str, Any],
+        run_id: str | None,
+        replay_of: str | None,
+        replay_mode: str | None,
+    ) -> None:
         self.recorder = recorder
         self.id = run_id or str(uuid.uuid4())
         self.name = name
@@ -106,12 +124,20 @@ class Run:
     @_safe
     def _start(self, input: Any, attrs: dict[str, Any], replay_of: str | None, replay_mode: str | None) -> None:
         red = self.recorder.redact
-        self.recorder.transport.send({
-            "event_id": str(uuid.uuid4()), "type": "run_start", "run_id": self.id,
-            "service": self.recorder.service, "name": self.name, "input": red(_jsonable(input)),
-            "attrs": red(_jsonable(attrs)), "started_at": _now(),
-            "replay_of": replay_of, "replay_mode": replay_mode,
-        })
+        self.recorder.transport.send(
+            {
+                "event_id": str(uuid.uuid4()),
+                "type": "run_start",
+                "run_id": self.id,
+                "service": self.recorder.service,
+                "name": self.name,
+                "input": red(_jsonable(input)),
+                "attrs": red(_jsonable(attrs)),
+                "started_at": _now(),
+                "replay_of": replay_of,
+                "replay_mode": replay_mode,
+            }
+        )
 
     def _next_seq(self) -> int:
         self._seq += 1
@@ -131,12 +157,14 @@ class Run:
     def tool(self, fn: F) -> F:
         """Wrap a tool function (sync or async) so every call is captured as a step."""
         if inspect.iscoroutinefunction(fn):
+
             @functools.wraps(fn)
             async def awrapper(*args: Any, **kwargs: Any) -> Any:
                 with self.step("tool", fn.__name__, input=kwargs or list(args)) as step:
                     result = await fn(*args, **kwargs)
                     step.output(result)
                     return result
+
             return awrapper  # type: ignore[return-value]
 
         @functools.wraps(fn)
@@ -145,6 +173,7 @@ class Run:
                 result = fn(*args, **kwargs)
                 step.output(result)
                 return result
+
         return wrapper  # type: ignore[return-value]
 
     def output(self, value: Any) -> None:
@@ -157,16 +186,23 @@ class Run:
     @_safe
     def _end(self) -> None:
         red = self.recorder.redact
-        self.recorder.transport.send({
-            "event_id": str(uuid.uuid4()), "type": "run_end", "run_id": self.id, "status": self._status,
-            "output": red(_jsonable(self._output)), "error": red(self._error) if self._error else None,
-            "ended_at": _now(),
-        })
+        self.recorder.transport.send(
+            {
+                "event_id": str(uuid.uuid4()),
+                "type": "run_end",
+                "run_id": self.id,
+                "status": self._status,
+                "output": red(_jsonable(self._output)),
+                "error": red(self._error) if self._error else None,
+                "ended_at": _now(),
+            }
+        )
 
 
 class Recorder:
-    def __init__(self, *, service: str, transport: Transport | None = None,
-                 redactor: Callable[[Any], Any] | None = None) -> None:
+    def __init__(
+        self, *, service: str, transport: Transport | None = None, redactor: Callable[[Any], Any] | None = None
+    ) -> None:
         self.service = service
         self.transport: Transport = transport or NullTransport()
         self._redactor = redactor
@@ -181,9 +217,16 @@ class Recorder:
             return "<REDACTION_FAILED>"
 
     @contextmanager
-    def run(self, name: str, *, input: Any = None, attrs: dict[str, Any] | None = None,
-            run_id: str | None = None, replay_of: str | None = None,
-            replay_mode: str | None = None) -> Iterator[Run]:
+    def run(
+        self,
+        name: str,
+        *,
+        input: Any = None,
+        attrs: dict[str, Any] | None = None,
+        run_id: str | None = None,
+        replay_of: str | None = None,
+        replay_mode: str | None = None,
+    ) -> Iterator[Run]:
         run = Run(self, name, input, attrs or {}, run_id, replay_of, replay_mode)
         try:
             yield run

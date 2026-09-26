@@ -11,7 +11,6 @@ from typing import Any
 
 import httpx
 import uvicorn
-
 from lineage_service.app import create_app as create_lineage
 from lineage_service.config import Settings as LineageSettings
 from support_agent.app import build_recorder
@@ -50,8 +49,8 @@ def serve(app: Any, port: int) -> Iterator[str]:
 
 @dataclass
 class Stack:
-    lineage: httpx.Client   # logged-in operator session
-    agent: httpx.Client     # service-token client
+    lineage: httpx.Client  # logged-in operator session
+    agent: httpx.Client  # service-token client
     agent_app: Any
 
     def wait_for_run(self, run_id: str, timeout: float = 10) -> dict[str, Any]:
@@ -65,16 +64,31 @@ class Stack:
 
 
 @contextmanager
-def stack(pg_urls: dict[str, str], *, llm: Any, now: datetime, legacy: bool = False,
-          lineage_up: bool = True) -> Iterator[Stack]:
+def stack(
+    pg_urls: dict[str, str], *, llm: Any, now: datetime, legacy: bool = False, lineage_up: bool = True
+) -> Iterator[Stack]:
     lport, aport = free_port(), free_port()
     lineage_url, agent_url = f"http://127.0.0.1:{lport}", f"http://127.0.0.1:{aport}"
-    lset = LineageSettings(database_url=pg_urls["lineage"], support_agent_url=agent_url,
-                           admin_email=ADMIN["email"], admin_password=ADMIN["password"], lineage_api_key=API_KEY,
-                           service_token=SERVICE_TOKEN, session_secret=SESSION_SECRET)
-    aset = AgentSettings(database_url=pg_urls["store"], llm_mode="recorded", legacy_order_lookup=legacy,
-                         lineage_url=lineage_url, lineage_api_key=API_KEY, lineage_redaction_key=REDACTION_KEY,
-                         service_token=SERVICE_TOKEN, session_secret=SESSION_SECRET, connector_latency_ms=(0, 0))
+    lset = LineageSettings(
+        database_url=pg_urls["lineage"],
+        support_agent_url=agent_url,
+        admin_email=ADMIN["email"],
+        admin_password=ADMIN["password"],
+        lineage_api_key=API_KEY,
+        service_token=SERVICE_TOKEN,
+        session_secret=SESSION_SECRET,
+    )
+    aset = AgentSettings(
+        database_url=pg_urls["store"],
+        llm_mode="recorded",
+        legacy_order_lookup=legacy,
+        lineage_url=lineage_url,
+        lineage_api_key=API_KEY,
+        lineage_redaction_key=REDACTION_KEY,
+        service_token=SERVICE_TOKEN,
+        session_secret=SESSION_SECRET,
+        connector_latency_ms=(0, 0),
+    )
     recorder = build_recorder(aset)
     if not lineage_up:
         recorder.transport._backoff = 0.01  # type: ignore[attr-defined]
@@ -82,12 +96,17 @@ def stack(pg_urls: dict[str, str], *, llm: Any, now: datetime, legacy: bool = Fa
     agent_app.state.recorder = recorder
     with serve(agent_app, aport):
         if lineage_up:
-            with serve(create_lineage(lset), lport), httpx.Client(base_url=lineage_url, timeout=30) as lc, \
-                    httpx.Client(base_url=agent_url, timeout=30,
-                                 headers={"Authorization": f"Bearer {SERVICE_TOKEN}"}) as ac:
+            with (
+                serve(create_lineage(lset), lport),
+                httpx.Client(base_url=lineage_url, timeout=30) as lc,
+                httpx.Client(
+                    base_url=agent_url, timeout=30, headers={"Authorization": f"Bearer {SERVICE_TOKEN}"}
+                ) as ac,
+            ):
                 assert lc.post("/v1/auth/login", json=ADMIN).status_code == 200
                 yield Stack(lineage=lc, agent=ac, agent_app=agent_app)
         else:
-            with httpx.Client(base_url=agent_url, timeout=30,
-                              headers={"Authorization": f"Bearer {SERVICE_TOKEN}"}) as ac:
+            with httpx.Client(
+                base_url=agent_url, timeout=30, headers={"Authorization": f"Bearer {SERVICE_TOKEN}"}
+            ) as ac:
                 yield Stack(lineage=None, agent=ac, agent_app=agent_app)  # type: ignore[arg-type]

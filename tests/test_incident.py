@@ -3,16 +3,18 @@
 from datetime import timedelta
 
 import pytest
+from lineage_sdk.values import fingerprint
 from sqlalchemy import create_engine, text
 
 from conftest import ANCHOR
-from lineage_sdk.values import fingerprint
 from tests.fakes import PolicyLLM
 from tests.servers import stack
 
 pytestmark = pytest.mark.integration
-MESSAGE = ("Hi, this is Sara (sara.qureshi@example.com, +1-303-555-0142). The trail shoes from my latest order "
-           "are too small, can I get a refund?")
+MESSAGE = (
+    "Hi, this is Sara (sara.qureshi@example.com, +1-303-555-0142). The trail shoes from my latest order "
+    "are too small, can I get a refund?"
+)
 
 
 def find_step(run: dict, name: str) -> dict:
@@ -29,19 +31,30 @@ def test_reference_incident_is_diagnosed_and_replay_explains_itself(pg_urls, sto
         run = st.wait_for_run(turn["run_id"])
         assert all(s["status"] == "ok" for s in run["steps"])
         assert [s["name"] for s in run["steps"] if s["kind"] == "tool"] == [
-            "lookup_recent_order", "check_refund_eligibility", "create_refund_offer", "post_ticket_reply"]
+            "lookup_recent_order",
+            "check_refund_eligibility",
+            "create_refund_offer",
+            "post_ticket_reply",
+        ]
 
         # 2. Lineage: one query from the refunded order ID to its origin, with the alternative it beat.
         lin = st.lineage.get(f"/v1/runs/{run['id']}/lineage", params={"fingerprint": fingerprint("ORD-7781")}).json()
         assert lin["origin"]["name"] == "lookup_recent_order" and lin["origin_kind"] == "tool_output"
-        assert lin["candidates"] == [{"chosen": "ORD-7781", "alternatives": ["ORD-8124"],
-                                      "reason": "ORDER BY updated_at DESC LIMIT 1"}]
+        assert lin["candidates"] == [
+            {"chosen": "ORD-7781", "alternatives": ["ORD-8124"], "reason": "ORDER BY updated_at DESC LIMIT 1"}
+        ]
         assert "create_refund_offer" in [n["name"] for n in lin["nodes"]]
 
         # 3. The world changes: the carrier confirms delivery of the other order.
-        r = st.agent.post("/v1/webhooks/carrier", json={"tracking_number": "1ZKESTREL8124", "status": "delivered",
-                                                        "location": "Denver, CO",
-                                                        "occurred_at": (ANCHOR + timedelta(hours=1)).isoformat()})
+        r = st.agent.post(
+            "/v1/webhooks/carrier",
+            json={
+                "tracking_number": "1ZKESTREL8124",
+                "status": "delivered",
+                "location": "Denver, CO",
+                "occurred_at": (ANCHOR + timedelta(hours=1)).isoformat(),
+            },
+        )
         assert r.status_code == 200, r.text
 
         # 4. Live replay re-executes tools against current state -> "can't reproduce".
@@ -69,16 +82,20 @@ def test_reference_incident_is_diagnosed_and_replay_explains_itself(pg_urls, sto
 
     # PII: raw email and phone never reach the lineage database.
     with create_engine(pg_urls["lineage"].replace("+asyncpg", "+psycopg2")).connect() as c:
-        dump = " ".join(str(row) for t in ("runs", "steps", "step_values", "candidates")
-                        for row in c.execute(text(f"SELECT * FROM {t}")))
+        dump = " ".join(
+            str(row)
+            for t in ("runs", "steps", "step_values", "candidates")
+            for row in c.execute(text(f"SELECT * FROM {t}"))
+        )
     assert "sara.qureshi@example.com" not in dump and "555-0142" not in dump and "3035550142" not in dump
     assert "ORD-7781" in dump  # business identifiers are kept
 
 
 def test_fixed_agent_asks_instead_of_guessing(pg_urls, store_db):
     with stack(pg_urls, llm=PolicyLLM(), now=ANCHOR, legacy=False) as st:
-        turn = st.agent.post("/v1/conversations", json={"customer_email": "sara.qureshi@example.com",
-                                                        "message": MESSAGE}).json()
+        turn = st.agent.post(
+            "/v1/conversations", json={"customer_email": "sara.qureshi@example.com", "message": MESSAGE}
+        ).json()
         assert "Which one do you mean?" in turn["reply"]
         run = st.wait_for_run(turn["run_id"])
         lookup = find_step(run, "lookup_recent_order")

@@ -67,8 +67,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="agent-lineage", version="1.0.0", lifespan=lifespan)
     app.state.db = db
-    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
-                       allow_methods=["*"], allow_headers=["*"])
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # --- middleware & errors ------------------------------------------------
 
@@ -87,14 +92,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         HTTP_LATENCY.labels(path).observe(time.perf_counter() - t0)
         response.headers["X-Request-ID"] = rid
         if path not in ("/healthz", "/readyz", "/metrics"):
-            log.info("%s %s", request.method, request.url.path,
-                     extra={"status_code": response.status_code, "path": path,
-                            "duration_ms": int((time.perf_counter() - t0) * 1000)})
+            log.info(
+                "%s %s",
+                request.method,
+                request.url.path,
+                extra={
+                    "status_code": response.status_code,
+                    "path": path,
+                    "duration_ms": int((time.perf_counter() - t0) * 1000),
+                },
+            )
         return response
 
     def error(status: int, code: str, message: str) -> JSONResponse:
-        return JSONResponse({"error": {"code": code, "message": message, "request_id": request_id_var.get()}},
-                            status_code=status)
+        return JSONResponse(
+            {"error": {"code": code, "message": message, "request_id": request_id_var.get()}}, status_code=status
+        )
 
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError) -> JSONResponse:
@@ -106,7 +119,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
-        return error(422, "validation_error", "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors()))
+        return error(
+            422, "validation_error", "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
+        )
 
     @app.exception_handler(Exception)
     async def _unhandled(_: Request, exc: Exception) -> JSONResponse:
@@ -168,10 +183,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         user = await security.authenticate(s, body.email, body.password)
         if user is None:
             raise ApiError(401, "invalid_credentials", "Invalid email or password")
-        token = security.sign_session(user.id, settings.session_secret.get_secret_value(),
-                                      settings.session_ttl_hours * 3600)
-        response.set_cookie(COOKIE, token, httponly=True, samesite="strict", secure=settings.cookie_secure,
-                            max_age=settings.session_ttl_hours * 3600)
+        token = security.sign_session(
+            user.id, settings.session_secret.get_secret_value(), settings.session_ttl_hours * 3600
+        )
+        response.set_cookie(
+            COOKIE,
+            token,
+            httponly=True,
+            samesite="strict",
+            secure=settings.cookie_secure,
+            max_age=settings.session_ttl_hours * 3600,
+        )
         return {"email": user.email, "role": user.role}
 
     @app.post("/v1/auth/logout")
@@ -204,10 +226,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # --- runs ---------------------------------------------------------------
 
     @app.get("/v1/runs")
-    async def list_runs(s: Session, _: UserDep, service: str | None = None, status: str | None = None,
-                        q: str | None = Query(None, max_length=200), since: datetime | None = None,
-                        replay_of: str | None = None, include_replays: bool = True,
-                        limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)) -> dict[str, Any]:
+    async def list_runs(
+        s: Session,
+        _: UserDep,
+        service: str | None = None,
+        status: str | None = None,
+        q: str | None = Query(None, max_length=200),
+        since: datetime | None = None,
+        replay_of: str | None = None,
+        include_replays: bool = True,
+        limit: int = Query(50, ge=1, le=200),
+        offset: int = Query(0, ge=0),
+    ) -> dict[str, Any]:
         stmt = select(Run)
         if service:
             stmt = stmt.where(Run.service == service)
@@ -221,12 +251,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             stmt = stmt.where(Run.replay_of.is_(None))
         if q:
             like = f"%{q}%"
-            stmt = stmt.where(or_(Run.id == q, Run.name.ilike(like), cast(Run.input, String).ilike(like),
-                                  cast(Run.output, String).ilike(like), cast(Run.attrs, String).ilike(like)))
+            stmt = stmt.where(
+                or_(
+                    Run.id == q,
+                    Run.name.ilike(like),
+                    cast(Run.input, String).ilike(like),
+                    cast(Run.output, String).ilike(like),
+                    cast(Run.attrs, String).ilike(like),
+                )
+            )
         total = (await s.execute(select(func.count()).select_from(stmt.subquery()))).scalar_one()
         runs = (await s.execute(stmt.order_by(Run.started_at.desc()).limit(limit).offset(offset))).scalars().all()
-        counts = dict((await s.execute(select(Step.run_id, func.count()).where(
-            Step.run_id.in_([r.id for r in runs]), Step.kind.in_(["llm", "tool"])).group_by(Step.run_id))).all())
+        counts = dict(
+            (
+                await s.execute(
+                    select(Step.run_id, func.count())
+                    .where(Step.run_id.in_([r.id for r in runs]), Step.kind.in_(["llm", "tool"]))
+                    .group_by(Step.run_id)
+                )
+            ).all()
+        )
         return {"total": total, "runs": [_run_summary(r, counts.get(r.id, 0)) for r in runs]}
 
     @app.get("/v1/runs/{run_id}")
@@ -237,24 +281,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         by_step: dict[str, list[dict[str, Any]]] = {}
         for v in values:
             by_step.setdefault(v.step_id, []).append(
-                {"direction": v.direction, "path": v.path, "fingerprint": v.fingerprint, "display": v.display})
+                {"direction": v.direction, "path": v.path, "fingerprint": v.fingerprint, "display": v.display}
+            )
         cand_by_step: dict[str, list[dict[str, Any]]] = {}
         for c in cands:
             cand_by_step.setdefault(c.step_id, []).append(
-                {"chosen": c.chosen, "alternatives": c.alternatives, "reason": c.reason})
+                {"chosen": c.chosen, "alternatives": c.alternatives, "reason": c.reason}
+            )
         replays = (await s.execute(select(Run).where(Run.replay_of == run_id).order_by(Run.started_at))).scalars().all()
-        return {**_run_summary(run, sum(1 for st in run.steps if st.kind in ("llm", "tool"))),
-                "input": run.input, "output": run.output, "error": run.error,
-                "replays": [_run_summary(r, 0) for r in replays],
-                "steps": [{"id": st.id, "seq": st.seq, "kind": st.kind, "name": st.name, "status": st.status,
-                           "input": st.input, "output": st.output, "error": st.error,
-                           "started_at": st.started_at, "duration_ms": st.duration_ms,
-                           "values": by_step.get(st.id, []), "candidates": cand_by_step.get(st.id, [])}
-                          for st in run.steps]}
+        return {
+            **_run_summary(run, sum(1 for st in run.steps if st.kind in ("llm", "tool"))),
+            "input": run.input,
+            "output": run.output,
+            "error": run.error,
+            "replays": [_run_summary(r, 0) for r in replays],
+            "steps": [
+                {
+                    "id": st.id,
+                    "seq": st.seq,
+                    "kind": st.kind,
+                    "name": st.name,
+                    "status": st.status,
+                    "input": st.input,
+                    "output": st.output,
+                    "error": st.error,
+                    "started_at": st.started_at,
+                    "duration_ms": st.duration_ms,
+                    "values": by_step.get(st.id, []),
+                    "candidates": cand_by_step.get(st.id, []),
+                }
+                for st in run.steps
+            ],
+        }
 
     @app.get("/v1/runs/{run_id}/lineage")
-    async def get_lineage(run_id: str, s: Session, _: UserDep,
-                          fingerprint: str = Query(pattern=r"^[0-9a-f]{16}$")) -> dict[str, Any]:
+    async def get_lineage(
+        run_id: str, s: Session, _: UserDep, fingerprint: str = Query(pattern=r"^[0-9a-f]{16}$")
+    ) -> dict[str, Any]:
         await _load_run(s, run_id, with_steps=False)
         return (await lineage(s, run_id, fingerprint)).to_dict()
 
@@ -271,15 +334,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         run = await _load_run(s, run_id)
         if run.replay_of:
             raise ApiError(409, "replay_of_replay", "Replay the original run instead")
-        payload = {"mode": body.mode, "run": {
-            "id": run.id, "name": run.name, "service": run.service, "input": run.input, "attrs": run.attrs,
-            "steps": [{"seq": st.seq, "kind": st.kind, "name": st.name, "status": st.status, "input": st.input,
-                       "output": st.output, "error": st.error} for st in run.steps if st.kind in ("llm", "tool")]}}
+        payload = {
+            "mode": body.mode,
+            "run": {
+                "id": run.id,
+                "name": run.name,
+                "service": run.service,
+                "input": run.input,
+                "attrs": run.attrs,
+                "steps": [
+                    {
+                        "seq": st.seq,
+                        "kind": st.kind,
+                        "name": st.name,
+                        "status": st.status,
+                        "input": st.input,
+                        "output": st.output,
+                        "error": st.error,
+                    }
+                    for st in run.steps
+                    if st.kind in ("llm", "tool")
+                ],
+            },
+        }
         try:
             resp = await request.app.state.http.post(
-                f"{settings.support_agent_url}/v1/replay", json=payload,
-                headers={"Authorization": f"Bearer {settings.service_token.get_secret_value()}",
-                         "X-Request-ID": request_id_var.get() or ""})
+                f"{settings.support_agent_url}/v1/replay",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {settings.service_token.get_secret_value()}",
+                    "X-Request-ID": request_id_var.get() or "",
+                },
+            )
         except httpx.HTTPError as exc:
             raise ApiError(502, "agent_unreachable", f"Support agent unreachable: {exc}") from exc
         if resp.status_code >= 400:
@@ -287,8 +373,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise ApiError(502, "replay_failed", f"Replay failed: {detail}")
         new_id = resp.json()["run_id"]
         # The replayed run arrives through ingest; wait briefly so the UI can open it immediately.
-        for _ in range(50):
-            if (await s.execute(select(Run.status).where(Run.id == new_id))).scalar_one_or_none() not in (None, "running"):
+        for _attempt in range(50):
+            if (await s.execute(select(Run.status).where(Run.id == new_id))).scalar_one_or_none() not in (
+                None,
+                "running",
+            ):
                 break
             await asyncio.sleep(0.1)
         return {"run_id": new_id, "replay_of": run_id, "mode": body.mode}
@@ -326,8 +415,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/v1/api-keys")
     async def list_keys(s: Session, _: UserDep) -> list[dict[str, Any]]:
         keys = (await s.execute(select(ApiKey).order_by(ApiKey.created_at.desc()))).scalars().all()
-        return [{"id": k.id, "name": k.name, "prefix": k.prefix, "created_at": k.created_at,
-                 "last_used_at": k.last_used_at, "revoked_at": k.revoked_at} for k in keys]
+        return [
+            {
+                "id": k.id,
+                "name": k.name,
+                "prefix": k.prefix,
+                "created_at": k.created_at,
+                "last_used_at": k.last_used_at,
+                "revoked_at": k.revoked_at,
+            }
+            for k in keys
+        ]
 
     class KeyBody(BaseModel):
         name: str = Field(min_length=1, max_length=80)
@@ -385,7 +483,17 @@ async def _load_run(s: AsyncSession, run_id: str, with_steps: bool = True) -> Ru
 
 
 def _run_summary(r: Run, step_count: int) -> dict[str, Any]:
-    return {"id": r.id, "service": r.service, "name": r.name, "status": r.status, "started_at": r.started_at,
-            "ended_at": r.ended_at, "attrs": r.attrs, "replay_of": r.replay_of, "replay_mode": r.replay_mode,
-            "pinned": r.pinned, "step_count": step_count,
-            "duration_ms": int((r.ended_at - r.started_at).total_seconds() * 1000) if r.ended_at else None}
+    return {
+        "id": r.id,
+        "service": r.service,
+        "name": r.name,
+        "status": r.status,
+        "started_at": r.started_at,
+        "ended_at": r.ended_at,
+        "attrs": r.attrs,
+        "replay_of": r.replay_of,
+        "replay_mode": r.replay_mode,
+        "pinned": r.pinned,
+        "step_count": step_count,
+        "duration_ms": int((r.ended_at - r.started_at).total_seconds() * 1000) if r.ended_at else None,
+    }

@@ -7,7 +7,14 @@ from typing import Any
 from lineage_sdk import RecordedRun, Recorder
 from lineage_sdk.replay import RecordedToolError
 
-from support_agent.agent.tools import TOOL_SPECS, ToolContext, ToolError, effective_args, parse_args, run_tool
+from support_agent.agent.tools import (
+    TOOL_SPECS,
+    ToolContext,
+    ToolError,
+    effective_args,
+    parse_args,
+    run_tool,
+)
 from support_agent.connectors.base import ConnectorError
 from support_agent.llm.client import LLM, LLMUnavailable, tool_call_message, tool_result_message
 
@@ -44,21 +51,33 @@ class Turn:
     ctx: ToolContext
 
 
-async def run_turn(turn: Turn, *, llm: LLM, recorder: Recorder, max_iterations: int = 8,
-                   recording: RecordedRun | None = None, replay_of: str | None = None,
-                   replay_mode: str | None = None) -> TurnResult:
+async def run_turn(
+    turn: Turn,
+    *,
+    llm: LLM,
+    recorder: Recorder,
+    max_iterations: int = 8,
+    recording: RecordedRun | None = None,
+    replay_of: str | None = None,
+    replay_mode: str | None = None,
+) -> TurnResult:
     ctx = turn.ctx
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": SYSTEM_PROMPT + f"\n\nCustomer ID: {ctx.customer_id}. Ticket: {ctx.ticket_id}."},
         *({"role": "user" if m["role"] == "customer" else "assistant", "content": m["content"]} for m in turn.history),
         {"role": "user", "content": turn.message},
     ]
-    attrs = {"conversation_id": ctx.conversation_id, "ticket_id": ctx.ticket_id, "customer_id": ctx.customer_id,
-             "legacy_order_lookup": ctx.legacy_order_lookup}
+    attrs = {
+        "conversation_id": ctx.conversation_id,
+        "ticket_id": ctx.ticket_id,
+        "customer_id": ctx.customer_id,
+        "legacy_order_lookup": ctx.legacy_order_lookup,
+    }
     run_input = {"message": turn.message, "history": turn.history}
 
-    with recorder.run("support-turn", input=run_input, attrs=attrs, replay_of=replay_of,
-                      replay_mode=replay_mode) as run:
+    with recorder.run(
+        "support-turn", input=run_input, attrs=attrs, replay_of=replay_of, replay_mode=replay_mode
+    ) as run:
         reply: str | None = None
         status = "ok"
         for _ in range(max_iterations):
@@ -69,8 +88,13 @@ async def run_turn(turn: Turn, *, llm: LLM, recorder: Recorder, max_iterations: 
                     step.fail(exc)
                     run.fail(exc)
                     raise LLMUnavailable(str(exc)) from exc
-                step.output({"content": response.get("content"), "tool_calls": response.get("tool_calls"),
-                             "model": response.get("model")})
+                step.output(
+                    {
+                        "content": response.get("content"),
+                        "tool_calls": response.get("tool_calls"),
+                        "model": response.get("model"),
+                    }
+                )
             calls = response.get("tool_calls") or []
             if not calls:
                 reply = (response.get("content") or "").strip()
@@ -81,8 +105,10 @@ async def run_turn(turn: Turn, *, llm: LLM, recorder: Recorder, max_iterations: 
                 messages.append(tool_result_message(call["id"], result))
         if reply is None:
             status = "escalated"
-            reply = ("I'm sorry, I couldn't resolve this automatically. I've passed your request to a team "
-                     "member who will follow up on this ticket.")
+            reply = (
+                "I'm sorry, I couldn't resolve this automatically. I've passed your request to a team "
+                "member who will follow up on this ticket."
+            )
             run.fail("max iterations reached; escalated to a human")
 
         # Post the reply to the helpdesk ticket (a captured, replayable step like any tool).
@@ -92,8 +118,11 @@ async def run_turn(turn: Turn, *, llm: LLM, recorder: Recorder, max_iterations: 
                 if recording is not None:
                     step.output(recording.next_tool("post_ticket_reply", post_args))
                 else:
-                    step.output(await ctx.connectors.helpdesk.add_comment(
-                        ticket_id=ctx.ticket_id, body=reply, public=True, author="ai"))
+                    step.output(
+                        await ctx.connectors.helpdesk.add_comment(
+                            ticket_id=ctx.ticket_id, body=reply, public=True, author="ai"
+                        )
+                    )
             except Exception as exc:  # the customer still gets the reply; the failure is visible in lineage
                 step.fail(exc)
                 log.exception("posting reply to ticket failed")

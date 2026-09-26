@@ -3,10 +3,9 @@
 import asyncio
 import json
 import logging
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol
 
 import httpx
-
 from lineage_sdk import RecordedRun
 
 log = logging.getLogger("support_agent.llm")
@@ -25,10 +24,18 @@ class LLM(Protocol):
 
 
 class OpenRouterLLM:
-    RETRYABLE = {408, 409, 429, 500, 502, 503, 504}
+    RETRYABLE: ClassVar[frozenset[int]] = frozenset({408, 409, 429, 500, 502, 503, 504})
 
-    def __init__(self, *, api_key: str, model: str, fallback_model: str | None, base_url: str,
-                 timeout_s: float, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        fallback_model: str | None,
+        base_url: str,
+        timeout_s: float,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
         self._models = [model] + ([fallback_model] if fallback_model and fallback_model != model else [])
         self._url = base_url.rstrip("/") + "/chat/completions"
         self._headers = {"Authorization": f"Bearer {api_key}", "X-Title": "Kestrel Support Agent"}
@@ -39,9 +46,16 @@ class OpenRouterLLM:
         for model in self._models:
             for attempt in range(2):  # one quick retry per model before falling back
                 try:
-                    resp = await self._client.post(self._url, headers=self._headers, json={
-                        "model": model, "messages": messages, "tools": tools, "temperature": 0,
-                    })
+                    resp = await self._client.post(
+                        self._url,
+                        headers=self._headers,
+                        json={
+                            "model": model,
+                            "messages": messages,
+                            "tools": tools,
+                            "temperature": 0,
+                        },
+                    )
                 except httpx.HTTPError as exc:
                     errors.append(f"{model}: {type(exc).__name__}")
                 else:
@@ -66,8 +80,10 @@ class OpenRouterLLM:
 
 def _parse(body: dict[str, Any], requested_model: str) -> LLMResponse:
     msg = body["choices"][0]["message"]
-    calls = [{"id": c["id"], "name": c["function"]["name"], "arguments": c["function"].get("arguments") or "{}"}
-             for c in msg.get("tool_calls") or []]
+    calls = [
+        {"id": c["id"], "name": c["function"]["name"], "arguments": c["function"].get("arguments") or "{}"}
+        for c in msg.get("tool_calls") or []
+    ]
     return LLMResponse(content=msg.get("content"), tool_calls=calls, model=body.get("model", requested_model))
 
 
@@ -79,8 +95,9 @@ class RecordedLLM:
 
     async def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> LLMResponse:
         out = self._rec.next_llm()
-        return LLMResponse(content=out.get("content"), tool_calls=out.get("tool_calls") or [],
-                           model=out.get("model", "recorded"))
+        return LLMResponse(
+            content=out.get("content"), tool_calls=out.get("tool_calls") or [], model=out.get("model", "recorded")
+        )
 
 
 class UnconfiguredLLM:
@@ -89,9 +106,14 @@ class UnconfiguredLLM:
 
 
 def tool_call_message(content: str | None, calls: list[dict[str, Any]]) -> dict[str, Any]:
-    return {"role": "assistant", "content": content,
-            "tool_calls": [{"id": c["id"], "type": "function",
-                            "function": {"name": c["name"], "arguments": c["arguments"]}} for c in calls]}
+    return {
+        "role": "assistant",
+        "content": content,
+        "tool_calls": [
+            {"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": c["arguments"]}}
+            for c in calls
+        ],
+    }
 
 
 def tool_result_message(call_id: str, result: Any) -> dict[str, Any]:

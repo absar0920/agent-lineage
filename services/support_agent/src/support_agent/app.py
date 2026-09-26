@@ -17,16 +17,24 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from lineage_sdk import (
+    HttpTransport,
+    NullTransport,
+    RecordedRun,
+    Recorder,
+    Redactor,
+    ReplayMissError,
+)
+from lineage_sdk.transport import Transport
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lineage_sdk import HttpTransport, NullTransport, RecordedRun, Recorder, Redactor, ReplayMissError
-from lineage_sdk.transport import Transport
 from support_agent.agent.loop import SERVICE, Turn, run_turn
 from support_agent.agent.tools import ToolContext
 from support_agent.config import Settings, get_settings
+from support_agent.connectors.base import CommerceConnector, HelpdeskConnector, PaymentsConnector
 from support_agent.connectors.registry import (
     ADAPTERS,
     CATALOG,
@@ -37,7 +45,13 @@ from support_agent.connectors.registry import (
 )
 from support_agent.data import models as m
 from support_agent.db import Database
-from support_agent.llm.client import LLM, LLMUnavailable, OpenRouterLLM, RecordedLLM, UnconfiguredLLM
+from support_agent.llm.client import (
+    LLM,
+    LLMUnavailable,
+    OpenRouterLLM,
+    RecordedLLM,
+    UnconfiguredLLM,
+)
 from support_agent.logging import configure_logging, request_id_var
 from support_agent.migrate import upgrade_async
 
@@ -70,13 +84,22 @@ def build_recorder(settings: Settings) -> Recorder:
 def build_llm(settings: Settings) -> LLM:
     if settings.llm_mode == "recorded" or settings.openrouter_api_key is None:
         return UnconfiguredLLM()
-    return OpenRouterLLM(api_key=settings.openrouter_api_key.get_secret_value(), model=settings.llm_model,
-                         fallback_model=settings.llm_fallback_model, base_url=settings.openrouter_base_url,
-                         timeout_s=settings.llm_timeout_s)
+    return OpenRouterLLM(
+        api_key=settings.openrouter_api_key.get_secret_value(),
+        model=settings.llm_model,
+        fallback_model=settings.llm_fallback_model,
+        base_url=settings.openrouter_base_url,
+        timeout_s=settings.llm_timeout_s,
+    )
 
 
-def create_app(settings: Settings | None = None, *, recorder: Recorder | None = None,
-               llm: LLM | None = None, now: datetime | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    recorder: Recorder | None = None,
+    llm: LLM | None = None,
+    now: datetime | None = None,
+) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level)
     db = Database(settings.database_url)
@@ -98,8 +121,13 @@ def create_app(settings: Settings | None = None, *, recorder: Recorder | None = 
         await db.dispose()
 
     app = FastAPI(title="Kestrel Support Agent", version="1.0.0", lifespan=lifespan)
-    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
-                       allow_methods=["*"], allow_headers=["*"])
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     @app.middleware("http")
     async def request_context(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
@@ -115,14 +143,22 @@ def create_app(settings: Settings | None = None, *, recorder: Recorder | None = 
         HTTP_LATENCY.labels(path).observe(time.perf_counter() - t0)
         response.headers["X-Request-ID"] = rid
         if path not in ("/healthz", "/readyz", "/metrics"):
-            log.info("%s %s", request.method, request.url.path,
-                     extra={"status_code": response.status_code, "path": path,
-                            "duration_ms": int((time.perf_counter() - t0) * 1000)})
+            log.info(
+                "%s %s",
+                request.method,
+                request.url.path,
+                extra={
+                    "status_code": response.status_code,
+                    "path": path,
+                    "duration_ms": int((time.perf_counter() - t0) * 1000),
+                },
+            )
         return response
 
     def error(status: int, code: str, message: str) -> JSONResponse:
-        return JSONResponse({"error": {"code": code, "message": message, "request_id": request_id_var.get()}},
-                            status_code=status)
+        return JSONResponse(
+            {"error": {"code": code, "message": message, "request_id": request_id_var.get()}}, status_code=status
+        )
 
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError) -> JSONResponse:
@@ -139,7 +175,9 @@ def create_app(settings: Settings | None = None, *, recorder: Recorder | None = 
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
-        return error(422, "validation_error", "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors()))
+        return error(
+            422, "validation_error", "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
+        )
 
     @app.exception_handler(Exception)
     async def _unhandled(_: Request, exc: Exception) -> JSONResponse:
@@ -165,8 +203,9 @@ def create_app(settings: Settings | None = None, *, recorder: Recorder | None = 
             return False
         try:
             payload, sig = token.rsplit(".", 1)
-            expected = hmac.new(settings.session_secret.get_secret_value().encode(), payload.encode(),
-                                hashlib.sha256).hexdigest()
+            expected = hmac.new(
+                settings.session_secret.get_secret_value().encode(), payload.encode(), hashlib.sha256
+            ).hexdigest()
             data = json.loads(base64.urlsafe_b64decode(payload))
         except ValueError:
             return False
@@ -195,8 +234,12 @@ def create_app(settings: Settings | None = None, *, recorder: Recorder | None = 
             await s.execute(text("SELECT 1"))
         except Exception as exc:
             raise ApiError(503, "db_unavailable", "Database not reachable") from exc
-        return {"status": "ready", "llm_mode": settings.llm_mode, "model": settings.llm_model,
-                "capture": type(rec.transport).__name__}
+        return {
+            "status": "ready",
+            "llm_mode": settings.llm_mode,
+            "model": settings.llm_model,
+            "capture": type(rec.transport).__name__,
+        }
 
     @app.get("/metrics")
     async def metrics() -> Response:
@@ -216,27 +259,42 @@ def create_app(settings: Settings | None = None, *, recorder: Recorder | None = 
         message: str = Field(min_length=1, max_length=4000)
 
     def tool_ctx(conv: m.Conversation, *, dry_run: bool = False) -> ToolContext:
-        return ToolContext(customer_id=conv.customer_id, ticket_id=conv.ticket_id, conversation_id=conv.id,
-                           connectors=build_connectors(db.sessionmaker, settings, dry_run=dry_run),
-                           refund_approval_threshold=settings.refund_approval_threshold,
-                           legacy_order_lookup=settings.legacy_order_lookup, now=now)
+        return ToolContext(
+            customer_id=conv.customer_id,
+            ticket_id=conv.ticket_id,
+            conversation_id=conv.id,
+            connectors=build_connectors(db.sessionmaker, settings, dry_run=dry_run),
+            refund_approval_threshold=settings.refund_approval_threshold,
+            legacy_order_lookup=settings.legacy_order_lookup,
+            now=now,
+        )
 
     async def take_turn(s: AsyncSession, conv: m.Conversation, message: str) -> dict[str, Any]:
         history = [{"role": msg.role, "content": msg.content} for msg in conv.messages]
         s.add(m.ConversationMessage(conversation_id=conv.id, role="customer", content=message))
         await s.commit()
         try:
-            result = await run_turn(Turn(message=message, history=history, ctx=tool_ctx(conv)), llm=model,
-                                    recorder=rec, max_iterations=settings.llm_max_iterations)
+            result = await run_turn(
+                Turn(message=message, history=history, ctx=tool_ctx(conv)),
+                llm=model,
+                recorder=rec,
+                max_iterations=settings.llm_max_iterations,
+            )
         except LLMUnavailable:
             TURNS.labels("llm_unavailable", "live").inc()
             raise
         TURNS.labels(result.status, "live").inc()
-        s.add(m.ConversationMessage(conversation_id=conv.id, role="assistant", content=result.reply,
-                                    run_id=result.run_id))
+        s.add(
+            m.ConversationMessage(conversation_id=conv.id, role="assistant", content=result.reply, run_id=result.run_id)
+        )
         await s.commit()
-        return {"conversation_id": conv.id, "ticket_id": conv.ticket_id, "reply": result.reply,
-                "run_id": result.run_id, "status": result.status}
+        return {
+            "conversation_id": conv.id,
+            "ticket_id": conv.ticket_id,
+            "reply": result.reply,
+            "run_id": result.run_id,
+            "status": result.status,
+        }
 
     @app.post("/v1/conversations", status_code=201)
     async def start_conversation(body: StartBody, s: Session, _: Operator) -> dict[str, Any]:
@@ -244,8 +302,9 @@ def create_app(settings: Settings | None = None, *, recorder: Recorder | None = 
         customer = await connectors.commerce.find_customer(email=body.customer_email)
         if customer is None:
             raise ApiError(404, "customer_not_found", "No customer with that email")
-        ticket = await connectors.helpdesk.create_ticket(customer_id=customer["customer_id"],
-                                                         subject=body.message[:120], body=body.message)
+        ticket = await connectors.helpdesk.create_ticket(
+            customer_id=customer["customer_id"], subject=body.message[:120], body=body.message
+        )
         conv = m.Conversation(id=str(uuid.uuid4()), customer_id=customer["customer_id"], ticket_id=ticket["ticket_id"])
         s.add(conv)
         await s.commit()
@@ -261,20 +320,40 @@ def create_app(settings: Settings | None = None, *, recorder: Recorder | None = 
 
     @app.get("/v1/conversations")
     async def list_conversations(s: Session, _: Operator, limit: int = 50) -> list[dict[str, Any]]:
-        rows = (await s.execute(select(m.Conversation, m.Customer).join(m.Customer)
-                                .order_by(m.Conversation.created_at.desc()).limit(min(limit, 200)))).all()
-        return [{"id": c.id, "customer_id": c.customer_id, "customer_name": cu.name, "customer_email": cu.email,
-                 "ticket_id": c.ticket_id, "created_at": c.created_at,
-                 "messages": [{"role": x.role, "content": x.content, "run_id": x.run_id, "created_at": x.created_at}
-                              for x in c.messages]} for c, cu in rows]
+        rows = (
+            await s.execute(
+                select(m.Conversation, m.Customer)
+                .join(m.Customer)
+                .order_by(m.Conversation.created_at.desc())
+                .limit(min(limit, 200))
+            )
+        ).all()
+        return [
+            {
+                "id": c.id,
+                "customer_id": c.customer_id,
+                "customer_name": cu.name,
+                "customer_email": cu.email,
+                "ticket_id": c.ticket_id,
+                "created_at": c.created_at,
+                "messages": [
+                    {"role": x.role, "content": x.content, "run_id": x.run_id, "created_at": x.created_at}
+                    for x in c.messages
+                ],
+            }
+            for c, cu in rows
+        ]
 
     @app.get("/v1/customers")
     async def search_customers(s: Session, _: Operator, q: str = "", limit: int = 20) -> list[dict[str, Any]]:
         stmt = select(m.Customer)
         if q:
             like = f"%{q.lower()}%"
-            stmt = stmt.where(func.lower(m.Customer.name).like(like) | func.lower(m.Customer.email).like(like)
-                              | (m.Customer.id == q.upper()))
+            stmt = stmt.where(
+                func.lower(m.Customer.name).like(like)
+                | func.lower(m.Customer.email).like(like)
+                | (m.Customer.id == q.upper())
+            )
         rows = (await s.execute(stmt.order_by(m.Customer.id).limit(min(limit, 100)))).scalars().all()
         return [{"id": c.id, "name": c.name, "email": c.email} for c in rows]
 
@@ -291,7 +370,13 @@ def create_app(settings: Settings | None = None, *, recorder: Recorder | None = 
         if name not in ADAPTERS:
             return {"name": name, "ok": False, "message": "Not connected: no adapter installed for this connector yet"}
         c = build_connectors(db.sessionmaker, settings)
-        target = {"shopify": c.commerce, "zendesk": c.helpdesk, "stripe": c.payments}[name]
+        target: CommerceConnector | HelpdeskConnector | PaymentsConnector
+        if name == "shopify":
+            target = c.commerce
+        elif name == "zendesk":
+            target = c.helpdesk
+        else:
+            target = c.payments
         t0 = time.perf_counter()
         try:
             ok = await target.health()
@@ -320,8 +405,13 @@ def create_app(settings: Settings | None = None, *, recorder: Recorder | None = 
 
     @app.post("/v1/webhooks/carrier")
     async def carrier_webhook(body: CarrierEvent, s: Session, _: Service) -> dict[str, Any]:
-        out = await apply_carrier_event(s, tracking_number=body.tracking_number, status=body.status,
-                                        location=body.location, occurred_at=body.occurred_at or datetime.now(UTC))
+        out = await apply_carrier_event(
+            s,
+            tracking_number=body.tracking_number,
+            status=body.status,
+            location=body.location,
+            occurred_at=body.occurred_at or datetime.now(UTC),
+        )
         if out is None:
             raise ApiError(404, "unknown_tracking_number", "No shipment with that tracking number")
         return out
@@ -344,9 +434,15 @@ def create_app(settings: Settings | None = None, *, recorder: Recorder | None = 
         turn = Turn(message=run_input.get("message", ""), history=run_input.get("history") or [], ctx=ctx)
         recording = RecordedRun(run, redact=rec.redact) if body.mode == "recorded" else None
         try:
-            result = await run_turn(turn, llm=RecordedLLM(recording) if recording else model, recorder=rec,
-                                    max_iterations=settings.llm_max_iterations, recording=recording,
-                                    replay_of=run["id"], replay_mode=body.mode)
+            result = await run_turn(
+                turn,
+                llm=RecordedLLM(recording) if recording else model,
+                recorder=rec,
+                max_iterations=settings.llm_max_iterations,
+                recording=recording,
+                replay_of=run["id"],
+                replay_mode=body.mode,
+            )
         except ReplayMissError as exc:
             raise ApiError(409, "replay_miss", str(exc)) from exc
         finally:

@@ -1,23 +1,40 @@
 import httpx
 import pytest
 import respx
+from lineage_sdk import MemoryTransport, Recorder
+from support_agent.agent.tools import (
+    ToolContext,
+    ToolError,
+    check_refund_eligibility,
+    create_refund_offer,
+    get_order,
+)
+from support_agent.config import Settings
+from support_agent.connectors.registry import build_connectors
+from support_agent.llm.client import LLMUnavailable, OpenRouterLLM
 
 from conftest import ANCHOR
-from lineage_sdk import MemoryTransport, Recorder
-from support_agent.agent.tools import ToolContext, ToolError, check_refund_eligibility, create_refund_offer, get_order
-from support_agent.connectors.registry import build_connectors
-from support_agent.config import Settings
-from support_agent.llm.client import LLMUnavailable, OpenRouterLLM
 
 pytestmark = pytest.mark.integration
 
 
 def ctx(store_db, **kw) -> ToolContext:
-    settings = Settings(database_url="unused", llm_mode="recorded", lineage_redaction_key="k" * 32,
-                        service_token="s" * 32, connector_latency_ms=(0, 0))
-    return ToolContext(customer_id="C-1042", ticket_id="TCK-1", conversation_id="conv-1",
-                       connectors=build_connectors(store_db.sessionmaker, settings), refund_approval_threshold=200,
-                       now=ANCHOR, **kw)
+    settings = Settings(
+        database_url="unused",
+        llm_mode="recorded",
+        lineage_redaction_key="k" * 32,
+        service_token="s" * 32,
+        connector_latency_ms=(0, 0),
+    )
+    return ToolContext(
+        customer_id="C-1042",
+        ticket_id="TCK-1",
+        conversation_id="conv-1",
+        connectors=build_connectors(store_db.sessionmaker, settings),
+        refund_approval_threshold=200,
+        now=ANCHOR,
+        **kw,
+    )
 
 
 def step():
@@ -29,8 +46,9 @@ def step():
 async def test_fixed_eligibility_checks_the_returns_ledger(store_db):
     out = await check_refund_eligibility(ctx(store_db), step(), order_id="ORD-7781", sku="FW-RIDGE-TR")
     assert out["eligible"] is False and "already returned" in out["reason"]
-    legacy = await check_refund_eligibility(ctx(store_db, legacy_order_lookup=True), step(),
-                                            order_id="ORD-7781", sku="FW-RIDGE-TR")
+    legacy = await check_refund_eligibility(
+        ctx(store_db, legacy_order_lookup=True), step(), order_id="ORD-7781", sku="FW-RIDGE-TR"
+    )
     assert legacy["eligible"] is True  # the original defect, kept for the regression test
 
 
@@ -45,16 +63,39 @@ async def test_refund_amount_and_approval_are_server_side(store_db):
     low = ctx(store_db)
     low.refund_approval_threshold = 100
     low.conversation_id = "conv-2"
-    assert (await create_refund_offer(low, step(), order_id="ORD-8124", sku="FW-RIDGE-TR"))["status"] == "needs_approval"
+    assert (await create_refund_offer(low, step(), order_id="ORD-8124", sku="FW-RIDGE-TR"))[
+        "status"
+    ] == "needs_approval"
 
 
 def llm(**kw) -> OpenRouterLLM:
-    return OpenRouterLLM(api_key="k", model="primary/model", fallback_model="fallback/model",
-                         base_url="https://openrouter.test/api/v1", timeout_s=5, **kw)
+    return OpenRouterLLM(
+        api_key="k",
+        model="primary/model",
+        fallback_model="fallback/model",
+        base_url="https://openrouter.test/api/v1",
+        timeout_s=5,
+        **kw,
+    )
 
 
-OK = {"model": "fallback/model", "choices": [{"message": {"content": None, "tool_calls": [
-    {"id": "c1", "type": "function", "function": {"name": "get_order", "arguments": '{"order_id": "ORD-1"}'}}]}}]}
+OK = {
+    "model": "fallback/model",
+    "choices": [
+        {
+            "message": {
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "c1",
+                        "type": "function",
+                        "function": {"name": "get_order", "arguments": '{"order_id": "ORD-1"}'},
+                    }
+                ],
+            }
+        }
+    ],
+}
 
 
 @respx.mock

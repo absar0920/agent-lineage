@@ -37,9 +37,19 @@ class Stats:
 
 
 class HttpTransport:
-    def __init__(self, endpoint: str, api_key: str, *, max_queue: int = 10_000, batch_size: int = 500,
-                 flush_interval: float = 1.0, max_retries: int = 3, backoff: float = 0.5,
-                 timeout: float = 5.0, client: httpx.Client | None = None) -> None:
+    def __init__(
+        self,
+        endpoint: str,
+        api_key: str,
+        *,
+        max_queue: int = 10_000,
+        batch_size: int = 500,
+        flush_interval: float = 1.0,
+        max_retries: int = 3,
+        backoff: float = 0.5,
+        timeout: float = 5.0,
+        client: httpx.Client | None = None,
+    ) -> None:
         self.stats = Stats()
         self._url = endpoint.rstrip("/") + "/v1/ingest"
         self._headers = {"Authorization": f"Bearer {api_key}"}

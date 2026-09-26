@@ -1,6 +1,5 @@
 import pytest
 from fastapi.testclient import TestClient
-
 from lineage_sdk import MemoryTransport, Recorder, Redactor
 from lineage_sdk.values import fingerprint
 from lineage_service.app import create_app
@@ -13,8 +12,14 @@ ADMIN = {"email": "admin@example.com", "password": "correct horse battery staple
 
 @pytest.fixture
 def client(pg_urls):
-    settings = Settings(database_url=pg_urls["lineage"], admin_email=ADMIN["email"], admin_password=ADMIN["password"],
-                        lineage_api_key=API_KEY, service_token="s" * 32, session_secret="x" * 32)
+    settings = Settings(
+        database_url=pg_urls["lineage"],
+        admin_email=ADMIN["email"],
+        admin_password=ADMIN["password"],
+        lineage_api_key=API_KEY,
+        service_token="s" * 32,
+        session_secret="x" * 32,
+    )
     with TestClient(create_app(settings)) as c:
         yield c
 
@@ -26,17 +31,32 @@ def login(c: TestClient) -> None:
 def incident_events() -> tuple[str, list[dict]]:
     t = MemoryTransport()
     rec = Recorder(service="kestrel-support", transport=t, redactor=Redactor("k" * 32))
-    with rec.run("support-turn", input={"message": "the trail shoes from my latest order are too small",
-                                        "email": "sara.qureshi@example.com"}) as run:
+    with rec.run(
+        "support-turn",
+        input={"message": "the trail shoes from my latest order are too small", "email": "sara.qureshi@example.com"},
+    ) as run:
         with run.step("llm", "chat", input={"messages": ["..."]}) as s:
-            s.output({"tool_calls": [{"id": "call_1", "name": "lookup_recent_order",
-                                      "arguments": '{"customer_id": "C-1042", "product_query": "trail shoes"}'}]})
-        with run.step("tool", "lookup_recent_order", input={"customer_id": "C-1042", "product_query": "trail shoes"}) as s:
+            s.output(
+                {
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "name": "lookup_recent_order",
+                            "arguments": '{"customer_id": "C-1042", "product_query": "trail shoes"}',
+                        }
+                    ]
+                }
+            )
+        with run.step(
+            "tool", "lookup_recent_order", input={"customer_id": "C-1042", "product_query": "trail shoes"}
+        ) as s:
             s.note_candidates(chosen="ORD-7781", alternatives=["ORD-8124"], reason="ORDER BY updated_at DESC")
             s.output({"order_id": "ORD-7781", "items": [{"sku": "FW-RIDGE-TR", "price": "129.00"}]})
         with run.step("tool", "check_refund_eligibility", input={"order_id": "ORD-7781", "sku": "FW-RIDGE-TR"}) as s:
             s.output({"eligible": True, "days_since_purchase": 35})
-        with run.step("tool", "create_refund_offer", input={"order_id": "ORD-7781", "sku": "FW-RIDGE-TR", "amount": "129.00"}) as s:
+        with run.step(
+            "tool", "create_refund_offer", input={"order_id": "ORD-7781", "sku": "FW-RIDGE-TR", "amount": "129.00"}
+        ) as s:
             s.output({"refund_offer_id": "RF-3FA1C2D9", "status": "offered"})
         run.output("I've created refund offer RF-3FA1C2D9 for $129.00 on order ORD-7781.")
     return run.id, t.events
@@ -64,9 +84,15 @@ def test_ingest_query_lineage_end_to_end(client):
     lin = client.get(f"/v1/runs/{run_id}/lineage", params={"fingerprint": fingerprint("ORD-7781")}).json()
     assert lin["found"] and lin["origin_kind"] == "tool_output"
     assert lin["origin"]["name"] == "lookup_recent_order"
-    assert lin["candidates"] == [{"chosen": "ORD-7781", "alternatives": ["ORD-8124"], "reason": "ORDER BY updated_at DESC"}]
-    assert [n["name"] for n in lin["nodes"]] == ["lookup_recent_order", "check_refund_eligibility",
-                                                 "create_refund_offer", "run.output"]
+    assert lin["candidates"] == [
+        {"chosen": "ORD-7781", "alternatives": ["ORD-8124"], "reason": "ORDER BY updated_at DESC"}
+    ]
+    assert [n["name"] for n in lin["nodes"]] == [
+        "lookup_recent_order",
+        "check_refund_eligibility",
+        "create_refund_offer",
+        "run.output",
+    ]
     assert "chosen over ORD-8124" in lin["summary"]
 
     # a value the model introduced itself
@@ -88,9 +114,19 @@ def test_list_search_diff_pin_and_keys(client):
 
     created = client.post("/v1/api-keys", json={"name": "ci"}).json()
     assert created["key"].startswith("lk_")
-    assert client.post("/v1/ingest", json={"events": []}, headers={"Authorization": f"Bearer {created['key']}"}).status_code == 202
+    assert (
+        client.post(
+            "/v1/ingest", json={"events": []}, headers={"Authorization": f"Bearer {created['key']}"}
+        ).status_code
+        == 202
+    )
     client.delete(f"/v1/api-keys/{created['id']}")
-    assert client.post("/v1/ingest", json={"events": []}, headers={"Authorization": f"Bearer {created['key']}"}).status_code == 401
+    assert (
+        client.post(
+            "/v1/ingest", json={"events": []}, headers={"Authorization": f"Bearer {created['key']}"}
+        ).status_code
+        == 401
+    )
 
 
 def test_errors_have_request_ids(client):

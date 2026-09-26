@@ -17,16 +17,35 @@ Direction = Literal["in", "out"]
 
 # Identifier-like tokens found inside longer text.
 ID_PATTERNS = [
-    re.compile(r"\b[A-Z]{2,5}-\d{3,}\b"),                       # ORD-7781, TCK-20001
-    re.compile(r"\b[A-Z]{2,5}-[A-Z0-9]{6,}\b"),                 # RF-3FA1C2D9
+    re.compile(r"\b[A-Z]{2,5}-\d{3,}\b"),  # ORD-7781, TCK-20001
+    re.compile(r"\b[A-Z]{2,5}-[A-Z0-9]{6,}\b"),  # RF-3FA1C2D9
     re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"),
-    re.compile(r"<[A-Z]+:[0-9a-f]{6,}>"),                        # redaction tokens
-    re.compile(r"\b(?:ch|re|pi)_[A-Za-z0-9]{8,}\b"),             # payment-provider IDs
+    re.compile(r"<[A-Z]+:[0-9a-f]{6,}>"),  # redaction tokens
+    re.compile(r"\b(?:ch|re|pi)_[A-Za-z0-9]{8,}\b"),  # payment-provider IDs
 ]
 AMOUNT = re.compile(r"\$\s?(\d{1,7}(?:,\d{3})*(?:\.\d{2})?)")
 # Values too common to carry lineage signal.
-STOP = {"true", "false", "null", "none", "ok", "yes", "no", "usd", "open", "delivered", "offered",
-        "succeeded", "refunded", "customer", "assistant", "user", "tool", "system", "function"}
+STOP = {
+    "true",
+    "false",
+    "null",
+    "none",
+    "ok",
+    "yes",
+    "no",
+    "usd",
+    "open",
+    "delivered",
+    "offered",
+    "succeeded",
+    "refunded",
+    "customer",
+    "assistant",
+    "user",
+    "tool",
+    "system",
+    "function",
+}
 MAX_TEXT_SCAN = 20_000
 
 

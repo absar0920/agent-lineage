@@ -20,17 +20,17 @@ async def retention_days(session: AsyncSession, default: int) -> int:
 
 async def purge(session: AsyncSession, days: int, now: datetime | None = None) -> int:
     cutoff = (now or datetime.now(UTC)) - timedelta(days=days)
-    result = await session.execute(
-        delete(Run).where(Run.started_at < cutoff, Run.pinned.is_(False)).returning(Run.id))
+    result = await session.execute(delete(Run).where(Run.started_at < cutoff, Run.pinned.is_(False)).returning(Run.id))
     deleted = len(result.all())
     # The idempotency ledger only needs to outlive SDK retries (minutes); keep a day.
-    await session.execute(delete(IngestedEvent).where(IngestedEvent.received_at < (now or datetime.now(UTC)) - timedelta(days=1)))
+    await session.execute(
+        delete(IngestedEvent).where(IngestedEvent.received_at < (now or datetime.now(UTC)) - timedelta(days=1))
+    )
     await session.commit()
     return deleted
 
 
-async def retention_loop(sm: async_sessionmaker[AsyncSession], default_days: int,
-                         interval_s: float = 6 * 3600) -> None:
+async def retention_loop(sm: async_sessionmaker[AsyncSession], default_days: int, interval_s: float = 6 * 3600) -> None:
     while True:
         try:
             async with sm() as session:

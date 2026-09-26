@@ -45,8 +45,9 @@ async def create_api_key(session: AsyncSession, name: str, raw: str | None = Non
 
 
 async def verify_api_key(session: AsyncSession, raw: str) -> ApiKey | None:
-    key = (await session.execute(select(ApiKey).where(
-        ApiKey.hash == _key_hash(raw), ApiKey.revoked_at.is_(None)))).scalar_one_or_none()
+    key = (
+        await session.execute(select(ApiKey).where(ApiKey.hash == _key_hash(raw), ApiKey.revoked_at.is_(None)))
+    ).scalar_one_or_none()
     if key:
         await session.execute(update(ApiKey).where(ApiKey.id == key.id).values(last_used_at=datetime.now(UTC)))
         await session.commit()

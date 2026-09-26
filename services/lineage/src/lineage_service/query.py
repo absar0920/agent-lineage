@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import asdict, dataclass, field
+from itertools import pairwise
 from typing import Any
 
 from lineage_sdk.values import fingerprint as fp_of
@@ -40,14 +41,22 @@ class LineageResult:
 
 
 async def lineage(session: AsyncSession, run_id: str, fingerprint: str) -> LineageResult:
-    rows = (await session.execute(
-        select(StepValue, Step).join(Step, StepValue.step_id == Step.id)
-        .where(StepValue.run_id == run_id, StepValue.fingerprint == fingerprint)
-        .order_by(Step.seq)
-    )).all()
+    rows = (
+        await session.execute(
+            select(StepValue, Step)
+            .join(Step, StepValue.step_id == Step.id)
+            .where(StepValue.run_id == run_id, StepValue.fingerprint == fingerprint)
+            .order_by(Step.seq)
+        )
+    ).all()
     if not rows:
-        return LineageResult(run_id=run_id, fingerprint=fingerprint, display="", found=False,
-                             summary="This value does not appear in the run.")
+        return LineageResult(
+            run_id=run_id,
+            fingerprint=fingerprint,
+            display="",
+            found=False,
+            summary="This value does not appear in the run.",
+        )
 
     by_step: dict[str, dict[str, Any]] = {}
     for value, step in rows:
@@ -75,15 +84,33 @@ async def lineage(session: AsyncSession, run_id: str, fingerprint: str) -> Linea
             continue  # appearances before the origin can't be part of this value's flow
         else:
             role = "consumer" if "in" in e["dirs"] else "carrier"
-        nodes.append(LineageNode(step_id=s.id, seq=s.seq, kind=s.kind, name=s.name, role=role,
-                                 directions=sorted(e["dirs"]), paths=e["paths"]))
-    edges = [{"source": a.step_id, "target": b.step_id} for a, b in zip(nodes, nodes[1:], strict=False)]
+        nodes.append(
+            LineageNode(
+                step_id=s.id,
+                seq=s.seq,
+                kind=s.kind,
+                name=s.name,
+                role=role,
+                directions=sorted(e["dirs"]),
+                paths=e["paths"],
+            )
+        )
+    edges = [{"source": a.step_id, "target": b.step_id} for a, b in pairwise(nodes)]
 
-    cands = (await session.execute(select(Candidate).where(
-        Candidate.run_id == run_id, Candidate.step_id == origin_entry["step"].id))).scalars().all()
-    candidates = [{"chosen": c.chosen, "alternatives": c.alternatives, "reason": c.reason}
-                  for c in cands if c.chosen_fingerprint == fingerprint
-                  or any(fp_of(a) == fingerprint for a in c.alternatives)]
+    cands = (
+        (
+            await session.execute(
+                select(Candidate).where(Candidate.run_id == run_id, Candidate.step_id == origin_entry["step"].id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    candidates: list[dict[str, Any]] = [
+        {"chosen": c.chosen, "alternatives": c.alternatives, "reason": c.reason}
+        for c in cands
+        if c.chosen_fingerprint == fingerprint or any(fp_of(a) == fingerprint for a in c.alternatives)
+    ]
 
     o = nodes[0]
     summary = {
@@ -94,19 +121,41 @@ async def lineage(session: AsyncSession, run_id: str, fingerprint: str) -> Linea
     }[origin_kind]
     if candidates:
         c = candidates[0]
-        summary += (f"; it was chosen over {', '.join(c['alternatives'])}"
-                    + (f" ({c['reason']})" if c["reason"] else ""))
+        alternatives: list[str] = c["alternatives"]
+        summary += f"; it was chosen over {', '.join(alternatives)}"
+        if c["reason"]:
+            summary += f" ({c['reason']})"
     consumers = [n for n in nodes if n.role == "consumer"]
     if consumers:
         summary += f"; then consumed by {len(consumers)} later step(s)."
-    return LineageResult(run_id=run_id, fingerprint=fingerprint, display=display, found=True, origin=o,
-                         origin_kind=origin_kind, candidates=candidates, nodes=nodes, edges=edges, summary=summary)
+    return LineageResult(
+        run_id=run_id,
+        fingerprint=fingerprint,
+        display=display,
+        found=True,
+        origin=o,
+        origin_kind=origin_kind,
+        candidates=candidates,
+        nodes=nodes,
+        edges=edges,
+        summary=summary,
+    )
 
 
 # --- diff -------------------------------------------------------------------
 
-VOLATILE_KEYS = {"id", "tool_call_id", "call_id", "created", "created_at", "updated_at_fetched", "duration_ms",
-                 "dry_run", "usage", "model"}
+VOLATILE_KEYS = {
+    "id",
+    "tool_call_id",
+    "call_id",
+    "created",
+    "created_at",
+    "updated_at_fetched",
+    "duration_ms",
+    "dry_run",
+    "usage",
+    "model",
+}
 
 
 def _stable(obj: Any) -> Any:
@@ -154,5 +203,12 @@ def diff_steps(a: list[Step], b: list[Step]) -> dict[str, Any]:
 def _brief(s: Step | None) -> dict[str, Any] | None:
     if s is None:
         return None
-    return {"step_id": s.id, "seq": s.seq, "kind": s.kind, "name": s.name, "status": s.status,
-            "input": s.input, "output": s.output}
+    return {
+        "step_id": s.id,
+        "seq": s.seq,
+        "kind": s.kind,
+        "name": s.name,
+        "status": s.status,
+        "input": s.input,
+        "output": s.output,
+    }

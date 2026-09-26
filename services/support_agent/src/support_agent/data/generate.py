@@ -25,25 +25,63 @@ INCIDENT_SKU = "FW-RIDGE-TR"
 
 CATEGORIES: dict[str, tuple[list[str], list[str], tuple[int, int], bool]] = {
     # category: (prefixes, nouns, price range, refundable)
-    "footwear": (["Ridgeline", "Summit", "Basalt", "Cedar", "Talus"],
-                 ["Trail Shoes", "Hiking Boots", "Approach Shoes", "Camp Sandals"], (69, 219), True),
-    "jackets": (["Stormline", "Alder", "Granite", "Cirrus", "Fjord"],
-                ["Rain Jacket", "Down Jacket", "Softshell", "Fleece Hoodie"], (59, 349), True),
-    "packs": (["Kestrel", "Cairn", "Scree", "Pika", "Couloir"],
-              ["Daypack 22L", "Backpack 45L", "Hydration Pack", "Duffel 60L"], (39, 259), True),
+    "footwear": (
+        ["Ridgeline", "Summit", "Basalt", "Cedar", "Talus"],
+        ["Trail Shoes", "Hiking Boots", "Approach Shoes", "Camp Sandals"],
+        (69, 219),
+        True,
+    ),
+    "jackets": (
+        ["Stormline", "Alder", "Granite", "Cirrus", "Fjord"],
+        ["Rain Jacket", "Down Jacket", "Softshell", "Fleece Hoodie"],
+        (59, 349),
+        True,
+    ),
+    "packs": (
+        ["Kestrel", "Cairn", "Scree", "Pika", "Couloir"],
+        ["Daypack 22L", "Backpack 45L", "Hydration Pack", "Duffel 60L"],
+        (39, 259),
+        True,
+    ),
     "tents": (["Meadow", "Tarn", "Col", "Bivy", "Saddle"], ["1P Tent", "2P Tent", "Tarp Shelter"], (129, 499), True),
-    "sleep": (["Ember", "Drift", "Loft", "Hearth", "Dusk"], ["Sleeping Bag", "Sleeping Pad", "Camp Pillow"], (29, 329), True),
+    "sleep": (
+        ["Ember", "Drift", "Loft", "Hearth", "Dusk"],
+        ["Sleeping Bag", "Sleeping Pad", "Camp Pillow"],
+        (29, 329),
+        True,
+    ),
     "cooking": (["Firebox", "Ember", "Coal", "Kettle"], ["Stove", "Cook Set", "Titanium Mug"], (19, 149), True),
-    "accessories": (["Kestrel", "Trailmark", "Switchback", "Ridge"], ["Headlamp", "Trekking Poles", "Merino Socks", "Buff"],
-                    (12, 89), True),
+    "accessories": (
+        ["Kestrel", "Trailmark", "Switchback", "Ridge"],
+        ["Headlamp", "Trekking Poles", "Merino Socks", "Buff"],
+        (12, 89),
+        True,
+    ),
     "nutrition": (["Trailfuel"], ["Energy Bars 12pk", "Electrolyte Mix"], (14, 39), False),
 }
 
 CARRIERS = ["UPS", "FedEx", "USPS", "DHL"]
-CITIES = ["Denver, CO", "Salt Lake City, UT", "Reno, NV", "Memphis, TN", "Louisville, KY",
-          "Columbus, OH", "Portland, OR", "Phoenix, AZ", "Chicago, IL", "Dallas, TX"]
-RETURN_REASONS = ["too small", "too large", "changed mind", "defective", "not as described",
-                  "arrived late", "wrong item"]
+CITIES = [
+    "Denver, CO",
+    "Salt Lake City, UT",
+    "Reno, NV",
+    "Memphis, TN",
+    "Louisville, KY",
+    "Columbus, OH",
+    "Portland, OR",
+    "Phoenix, AZ",
+    "Chicago, IL",
+    "Dallas, TX",
+]
+RETURN_REASONS = [
+    "too small",
+    "too large",
+    "changed mind",
+    "defective",
+    "not as described",
+    "arrived late",
+    "wrong item",
+]
 TICKET_TEMPLATES = [
     ("Where is my order {order}?", ["shipping", "wismo"]),
     ("Refund request for {item}", ["refund"]),
@@ -72,8 +110,9 @@ def money(value: float) -> Decimal:
     return Decimal(f"{value:.2f}")
 
 
-def generate(anchor: datetime, seed: int = 20260922, customers: int = 1000,
-             orders: int = 4500, tickets: int = 1200) -> Dataset:
+def generate(
+    anchor: datetime, seed: int = 20260922, customers: int = 1000, orders: int = 4500, tickets: int = 1200
+) -> Dataset:
     rng = random.Random(seed)
     fake = Faker("en_US")
     fake.seed_instance(seed)
@@ -89,8 +128,15 @@ def generate(anchor: datetime, seed: int = 20260922, customers: int = 1000,
                 sku = f"{category[:2].upper()}-{prefix[:5].upper()}-{''.join(w[0] for w in noun.split()).upper()}"
                 if any(p["sku"] == sku for p in products):
                     continue
-                products.append({"sku": sku, "name": f"{prefix} {noun}", "category": category,
-                                 "price": money(rng.randint(lo, hi) - 0.01), "refundable": refundable})
+                products.append(
+                    {
+                        "sku": sku,
+                        "name": f"{prefix} {noun}",
+                        "category": category,
+                        "price": money(rng.randint(lo, hi) - 0.01),
+                        "refundable": refundable,
+                    }
+                )
     ridge = next(p for p in products if p["name"] == "Ridgeline Trail Shoes")
     ridge.update(sku=INCIDENT_SKU, price=money(129))
     for p in products:
@@ -100,14 +146,20 @@ def generate(anchor: datetime, seed: int = 20260922, customers: int = 1000,
     customer_ids = [f"C-{1000 + i}" for i in range(customers)]
     for cid in customer_ids:
         first, last = fake.first_name(), fake.last_name()
-        ds.add("customers", {
-            "id": cid, "name": f"{first} {last}",
-            "email": f"{first}.{last}.{cid[2:]}@{fake.free_email_domain()}".lower(),
-            "phone": fake.numerify("+1-###-###-####"), "address": fake.address().replace("\n", ", "),
-            "created_at": anchor - timedelta(days=rng.randint(30, 900)),
-        })
+        ds.add(
+            "customers",
+            {
+                "id": cid,
+                "name": f"{first} {last}",
+                "email": f"{first}.{last}.{cid[2:]}@{fake.free_email_domain()}".lower(),
+                "phone": fake.numerify("+1-###-###-####"),
+                "address": fake.address().replace("\n", ", "),
+                "created_at": anchor - timedelta(days=rng.randint(30, 900)),
+            },
+        )
     ds.rows["customers"][customer_ids.index(INCIDENT_CUSTOMER)].update(
-        name="Sara Qureshi", email="sara.qureshi@example.com")
+        name="Sara Qureshi", email="sara.qureshi@example.com"
+    )
 
     # --- orders (18 months, seasonal peaks in Nov/Dec and May/Jun) ---
     start = anchor - timedelta(days=548)
@@ -158,28 +210,74 @@ def generate(anchor: datetime, seed: int = 20260922, customers: int = 1000,
         created = min(created, anchor - timedelta(hours=1))
         solved = created < anchor - timedelta(days=5) or rng.random() < 0.5
         tid = f"TCK-{20000 + n}"
-        ds.add("tickets", {
-            "id": tid, "customer_id": cid, "subject": template.format(order=order["id"], item=item["name"]),
-            "status": "solved" if solved else rng.choice(["new", "open", "pending"]), "tags": tags,
-            "created_at": created, "updated_at": created + timedelta(hours=rng.randint(1, 72)),
-        })
-        ds.add("ticket_comments", {"ticket_id": tid, "author": "customer", "public": True,
-                                   "body": fake.paragraph(nb_sentences=3), "created_at": created})
+        ds.add(
+            "tickets",
+            {
+                "id": tid,
+                "customer_id": cid,
+                "subject": template.format(order=order["id"], item=item["name"]),
+                "status": "solved" if solved else rng.choice(["new", "open", "pending"]),
+                "tags": tags,
+                "created_at": created,
+                "updated_at": created + timedelta(hours=rng.randint(1, 72)),
+            },
+        )
+        ds.add(
+            "ticket_comments",
+            {
+                "ticket_id": tid,
+                "author": "customer",
+                "public": True,
+                "body": fake.paragraph(nb_sentences=3),
+                "created_at": created,
+            },
+        )
         if solved:
-            ds.add("ticket_comments", {"ticket_id": tid, "author": "agent", "public": True,
-                                       "body": fake.paragraph(nb_sentences=2),
-                                       "created_at": created + timedelta(hours=rng.randint(1, 30))})
-    
-    for name, enabled in [("shopify", True), ("zendesk", True), ("stripe", True), ("woocommerce", False),
-                          ("gorgias", False), ("intercom", False), ("freshdesk", False), ("shipstation", False)]:
-        ds.add("connector_configs", {"name": name, "enabled": enabled, "settings": {},
-                                     "last_sync_at": anchor - timedelta(minutes=rng.randint(2, 50)) if enabled else None,
-                                     "updated_at": anchor})
+            ds.add(
+                "ticket_comments",
+                {
+                    "ticket_id": tid,
+                    "author": "agent",
+                    "public": True,
+                    "body": fake.paragraph(nb_sentences=2),
+                    "created_at": created + timedelta(hours=rng.randint(1, 30)),
+                },
+            )
+
+    for name, enabled in [
+        ("shopify", True),
+        ("zendesk", True),
+        ("stripe", True),
+        ("woocommerce", False),
+        ("gorgias", False),
+        ("intercom", False),
+        ("freshdesk", False),
+        ("shipstation", False),
+    ]:
+        ds.add(
+            "connector_configs",
+            {
+                "name": name,
+                "enabled": enabled,
+                "settings": {},
+                "last_sync_at": anchor - timedelta(minutes=rng.randint(2, 50)) if enabled else None,
+                "updated_at": anchor,
+            },
+        )
     return ds
 
 
-def _add_order(ds: Dataset, rng: random.Random, fake: Faker, anchor: datetime, order_id: str, cid: str,
-               t: datetime, products: list[dict[str, Any]], item_id: int) -> int:
+def _add_order(
+    ds: Dataset,
+    rng: random.Random,
+    fake: Faker,
+    anchor: datetime,
+    order_id: str,
+    cid: str,
+    t: datetime,
+    products: list[dict[str, Any]],
+    item_id: int,
+) -> int:
     age = (anchor - t).days
     status = "delivered" if age > 9 else rng.choice(["paid", "fulfilled", "shipped", "delivered"])
     if rng.random() < 0.02:
@@ -188,18 +286,37 @@ def _add_order(ds: Dataset, rng: random.Random, fake: Faker, anchor: datetime, o
     order_items = []
     for p in products:
         qty = rng.choices([1, 2], weights=[90, 10])[0]
-        order_items.append({"id": item_id, "order_id": order_id, "sku": p["sku"], "name": p["name"],
-                            "price": p["price"], "qty": qty})
+        order_items.append(
+            {"id": item_id, "order_id": order_id, "sku": p["sku"], "name": p["name"], "price": p["price"], "qty": qty}
+        )
         total += p["price"] * qty
         item_id += 1
     updated = t + timedelta(days=min(age, rng.randint(2, 8)))
-    ds.add("orders", {"id": order_id, "customer_id": cid, "placed_at": t, "updated_at": updated,
-                      "status": status, "total": total, "currency": "USD"})
+    ds.add(
+        "orders",
+        {
+            "id": order_id,
+            "customer_id": cid,
+            "placed_at": t,
+            "updated_at": updated,
+            "status": status,
+            "total": total,
+            "currency": "USD",
+        },
+    )
     for it in order_items:
         ds.add("order_items", it)
     pay_id = f"ch_{fake.hexify('^' * 24)}"
-    ds.add("payments", {"id": pay_id, "order_id": order_id, "amount": total,
-                        "status": "refunded" if status == "cancelled" else "succeeded", "created_at": t})
+    ds.add(
+        "payments",
+        {
+            "id": pay_id,
+            "order_id": order_id,
+            "amount": total,
+            "status": "refunded" if status == "cancelled" else "succeeded",
+            "created_at": t,
+        },
+    )
     if status in ("shipped", "delivered"):
         _add_shipment(ds, rng, fake, order_id, t, status, anchor)
     if status == "delivered":
@@ -214,20 +331,38 @@ def _add_order(ds: Dataset, rng: random.Random, fake: Faker, anchor: datetime, o
                     rstatus, received = "requested", None
                 ret_id = f"RET-{50000 + ds.count('returns')}"
                 amount = it["price"] * it["qty"]
-                ds.add("returns", {"id": ret_id, "order_item_id": it["id"], "reason": rng.choice(RETURN_REASONS),
-                                   "status": rstatus, "requested_at": requested, "received_at": received,
-                                   "refund_amount": amount if rstatus == "refunded" else None})
+                ds.add(
+                    "returns",
+                    {
+                        "id": ret_id,
+                        "order_item_id": it["id"],
+                        "reason": rng.choice(RETURN_REASONS),
+                        "status": rstatus,
+                        "requested_at": requested,
+                        "received_at": received,
+                        "refund_amount": amount if rstatus == "refunded" else None,
+                    },
+                )
                 if rstatus == "refunded" and received:
-                    ds.add("refunds", {"id": f"re_{fake.hexify('^' * 24)}", "payment_id": pay_id,
-                                       "order_item_id": it["id"], "amount": amount, "status": "succeeded",
-                                       "created_at": received + timedelta(hours=6)})
+                    ds.add(
+                        "refunds",
+                        {
+                            "id": f"re_{fake.hexify('^' * 24)}",
+                            "payment_id": pay_id,
+                            "order_item_id": it["id"],
+                            "amount": amount,
+                            "status": "succeeded",
+                            "created_at": received + timedelta(hours=6),
+                        },
+                    )
                     # Return processing touches the order row — the root of the reference incident.
                     ds.rows["orders"][-1]["updated_at"] = received + timedelta(hours=6)
     return item_id
 
 
-def _add_shipment(ds: Dataset, rng: random.Random, fake: Faker, order_id: str, t: datetime, status: str,
-                  anchor: datetime) -> None:
+def _add_shipment(
+    ds: Dataset, rng: random.Random, fake: Faker, order_id: str, t: datetime, status: str, anchor: datetime
+) -> None:
     ship_id = f"SHP-{order_id[4:]}"
     carrier = rng.choice(CARRIERS)
     events = [("label_created", t + timedelta(hours=rng.randint(4, 30)))]
@@ -240,12 +375,21 @@ def _add_shipment(ds: Dataset, rng: random.Random, fake: Faker, order_id: str, t
             events.append(("delayed", events[-1][1] + timedelta(days=rng.randint(1, 3))))
         events.append((final, events[-1][1] + timedelta(days=rng.randint(1, 5))))
     events = [(s, min(ts, anchor - timedelta(minutes=5))) for s, ts in events]
-    ds.add("shipments", {"id": ship_id, "order_id": order_id, "carrier": carrier,
-                         "tracking_number": fake.bothify("1Z#########???").upper(), "status": final,
-                         "updated_at": events[-1][1]})
+    ds.add(
+        "shipments",
+        {
+            "id": ship_id,
+            "order_id": order_id,
+            "carrier": carrier,
+            "tracking_number": fake.bothify("1Z#########???").upper(),
+            "status": final,
+            "updated_at": events[-1][1],
+        },
+    )
     for s, ts in events:
-        ds.add("shipment_events", {"shipment_id": ship_id, "status": s, "location": rng.choice(CITIES),
-                                   "occurred_at": ts})
+        ds.add(
+            "shipment_events", {"shipment_id": ship_id, "status": s, "location": rng.choice(CITIES), "occurred_at": ts}
+        )
 
 
 def _add_incident(ds: Dataset, anchor: datetime, ridge: dict[str, Any], item_id: int) -> int:
@@ -255,41 +399,114 @@ def _add_incident(ds: Dataset, anchor: datetime, ridge: dict[str, Any], item_id:
     old_updated = anchor - timedelta(days=2)
     new_placed = anchor - timedelta(days=10)
     new_updated = anchor - timedelta(days=7)
-    for oid, placed, updated in [(INCIDENT_OLD_ORDER, old_placed, old_updated),
-                                 (INCIDENT_NEW_ORDER, new_placed, new_updated)]:
-        ds.add("orders", {"id": oid, "customer_id": INCIDENT_CUSTOMER, "placed_at": placed,
-                          "updated_at": updated, "status": "delivered", "total": ridge["price"], "currency": "USD"})
-        ds.add("order_items", {"id": item_id, "order_id": oid, "sku": INCIDENT_SKU, "name": ridge["name"],
-                               "price": ridge["price"], "qty": 1})
+    for oid, placed, updated in [
+        (INCIDENT_OLD_ORDER, old_placed, old_updated),
+        (INCIDENT_NEW_ORDER, new_placed, new_updated),
+    ]:
+        ds.add(
+            "orders",
+            {
+                "id": oid,
+                "customer_id": INCIDENT_CUSTOMER,
+                "placed_at": placed,
+                "updated_at": updated,
+                "status": "delivered",
+                "total": ridge["price"],
+                "currency": "USD",
+            },
+        )
+        ds.add(
+            "order_items",
+            {
+                "id": item_id,
+                "order_id": oid,
+                "sku": INCIDENT_SKU,
+                "name": ridge["name"],
+                "price": ridge["price"],
+                "qty": 1,
+            },
+        )
         pay_id = f"ch_incident_{oid[4:]}"
-        ds.add("payments", {"id": pay_id, "order_id": oid, "amount": ridge["price"], "status": "succeeded",
-                            "created_at": placed})
+        ds.add(
+            "payments",
+            {"id": pay_id, "order_id": oid, "amount": ridge["price"], "status": "succeeded", "created_at": placed},
+        )
         ship_id = f"SHP-{oid[4:]}"
         delivered = placed + timedelta(days=3)
-        ds.add("shipments", {"id": ship_id, "order_id": oid, "carrier": "UPS",
-                             "tracking_number": f"1ZKESTREL{oid[4:]}", "status": "delivered",
-                             "updated_at": delivered})
-        for s, ts in [("label_created", placed + timedelta(hours=8)),
-                      ("in_transit", placed + timedelta(days=1)), ("delivered", delivered)]:
-            ds.add("shipment_events", {"shipment_id": ship_id, "status": s, "location": "Denver, CO",
-                                       "occurred_at": ts})
+        ds.add(
+            "shipments",
+            {
+                "id": ship_id,
+                "order_id": oid,
+                "carrier": "UPS",
+                "tracking_number": f"1ZKESTREL{oid[4:]}",
+                "status": "delivered",
+                "updated_at": delivered,
+            },
+        )
+        for s, ts in [
+            ("label_created", placed + timedelta(hours=8)),
+            ("in_transit", placed + timedelta(days=1)),
+            ("delivered", delivered),
+        ]:
+            ds.add(
+                "shipment_events", {"shipment_id": ship_id, "status": s, "location": "Denver, CO", "occurred_at": ts}
+            )
         if oid == INCIDENT_OLD_ORDER:
-            ds.add("returns", {"id": "RET-49990", "order_item_id": item_id, "reason": "too small",
-                               "status": "refunded", "requested_at": old_returned - timedelta(days=6),
-                               "received_at": old_returned, "refund_amount": ridge["price"]})
-            ds.add("refunds", {"id": "re_incident_7781", "payment_id": pay_id, "order_item_id": item_id,
-                               "amount": ridge["price"], "status": "succeeded", "created_at": old_returned})
+            ds.add(
+                "returns",
+                {
+                    "id": "RET-49990",
+                    "order_item_id": item_id,
+                    "reason": "too small",
+                    "status": "refunded",
+                    "requested_at": old_returned - timedelta(days=6),
+                    "received_at": old_returned,
+                    "refund_amount": ridge["price"],
+                },
+            )
+            ds.add(
+                "refunds",
+                {
+                    "id": "re_incident_7781",
+                    "payment_id": pay_id,
+                    "order_item_id": item_id,
+                    "amount": ridge["price"],
+                    "status": "succeeded",
+                    "created_at": old_returned,
+                },
+            )
         item_id += 1
     return item_id
 
 
-TABLE_ORDER = ["products", "customers", "orders", "order_items", "payments", "refunds", "shipments",
-               "shipment_events", "returns", "tickets", "ticket_comments", "connector_configs"]
+TABLE_ORDER = [
+    "products",
+    "customers",
+    "orders",
+    "order_items",
+    "payments",
+    "refunds",
+    "shipments",
+    "shipment_events",
+    "returns",
+    "tickets",
+    "ticket_comments",
+    "connector_configs",
+]
 MODELS: dict[str, type[m.Base]] = {
-    "products": m.Product, "customers": m.Customer, "orders": m.Order, "order_items": m.OrderItem,
-    "payments": m.Payment, "refunds": m.Refund, "shipments": m.Shipment,
-    "shipment_events": m.ShipmentEvent, "returns": m.Return, "tickets": m.Ticket,
-    "ticket_comments": m.TicketComment, "connector_configs": m.ConnectorConfig,
+    "products": m.Product,
+    "customers": m.Customer,
+    "orders": m.Order,
+    "order_items": m.OrderItem,
+    "payments": m.Payment,
+    "refunds": m.Refund,
+    "shipments": m.Shipment,
+    "shipment_events": m.ShipmentEvent,
+    "returns": m.Return,
+    "tickets": m.Ticket,
+    "ticket_comments": m.TicketComment,
+    "connector_configs": m.ConnectorConfig,
 }
 
 
@@ -297,11 +514,12 @@ async def load(session: AsyncSession, ds: Dataset, chunk: int = 2000) -> dict[st
     for table in TABLE_ORDER:
         rows = ds.rows.get(table, [])
         for i in range(0, len(rows), chunk):
-            await session.execute(insert(MODELS[table]), rows[i:i + chunk])
+            await session.execute(insert(MODELS[table]), rows[i : i + chunk])
     # Explicit ids were inserted; move serial sequences past them.
     for table in ("order_items", "shipment_events", "ticket_comments"):
-        await session.execute(text(
-            f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), COALESCE(MAX(id), 1)) FROM {table}"))
+        await session.execute(
+            text(f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), COALESCE(MAX(id), 1)) FROM {table}")  # noqa: S608
+        )
     await session.commit()
     return {t: ds.count(t) for t in TABLE_ORDER}
 

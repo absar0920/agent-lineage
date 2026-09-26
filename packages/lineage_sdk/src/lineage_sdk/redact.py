@@ -18,8 +18,20 @@ CARD = re.compile(r"\b(?:\d[ -]?){13,19}\b")
 
 # Field names whose values are always PII. Deliberately excludes plain "name",
 # which usually holds business data (product names, tool names).
-DEFAULT_FIELDS = frozenset({"email", "phone", "address", "customer_name", "full_name",
-                            "first_name", "last_name", "street", "postal_code", "zip"})
+DEFAULT_FIELDS = frozenset(
+    {
+        "email",
+        "phone",
+        "address",
+        "customer_name",
+        "full_name",
+        "first_name",
+        "last_name",
+        "street",
+        "postal_code",
+        "zip",
+    }
+)
 MAX_LEARNED = 10_000
 
 
