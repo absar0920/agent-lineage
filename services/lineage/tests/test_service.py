@@ -143,3 +143,27 @@ def test_settings_and_retention(client):
     assert client.get("/v1/settings").json() == {"retention_days": 7}
     assert client.get("/metrics").status_code == 200
     assert client.get("/readyz").json() == {"status": "ready"}
+
+
+async def test_retention_purges_old_unpinned_runs_only(pg_urls):
+    from datetime import UTC, datetime, timedelta
+
+    from lineage_service.db import Database
+    from lineage_service.models import Run
+    from lineage_service.retention import purge
+
+    db = Database(pg_urls["lineage"])
+    now = datetime.now(UTC)
+    async with db.sessionmaker() as s:
+        s.add_all(
+            [
+                Run(id="old-unpinned", service="t", name="r", started_at=now - timedelta(days=40), attrs={}),
+                Run(id="old-pinned", service="t", name="r", started_at=now - timedelta(days=40), attrs={}, pinned=True),
+                Run(id="recent", service="t", name="r", started_at=now - timedelta(days=2), attrs={}),
+            ]
+        )
+        await s.commit()
+        assert await purge(s, days=30, now=now) >= 1
+        remaining = {r for r in (await s.execute(Run.__table__.select().with_only_columns(Run.id))).scalars()}
+    await db.dispose()
+    assert "old-unpinned" not in remaining and {"old-pinned", "recent"} <= remaining

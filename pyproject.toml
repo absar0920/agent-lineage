@@ -51,3 +51,7 @@ ignore = ["S101", "S311"]
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["lineage_sdk.*", "lineage_service.*"]
+strict = true
