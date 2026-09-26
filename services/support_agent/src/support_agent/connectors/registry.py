@@ -17,6 +17,7 @@ from support_agent.connectors.mock import (
     MockZendesk,
 )
 from support_agent.data import models as m
+from support_agent.db import Base
 
 CATALOG: dict[str, tuple[str, ConnectorKind]] = {
     "shopify": ("Shopify", "commerce"),
@@ -49,7 +50,7 @@ def build_connectors(
 async def connector_statuses(session: AsyncSession) -> list[ConnectorStatus]:
     configs = {c.name: c for c in (await session.execute(select(m.ConnectorConfig))).scalars()}
 
-    async def count(model: type[m.Base]) -> int:
+    async def count(model: type[Base]) -> int:
         return int((await session.execute(select(func.count()).select_from(model))).scalar_one())
 
     records = {

@@ -17,6 +17,7 @@ from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from support_agent.data import models as m
+from support_agent.db import Base
 
 INCIDENT_CUSTOMER = "C-1042"
 INCIDENT_OLD_ORDER = "ORD-7781"  # returned + refunded; return processing bumped updated_at
@@ -494,7 +495,7 @@ TABLE_ORDER = [
     "ticket_comments",
     "connector_configs",
 ]
-MODELS: dict[str, type[m.Base]] = {
+MODELS: dict[str, type[Base]] = {
     "products": m.Product,
     "customers": m.Customer,
     "orders": m.Order,
